@@ -1,0 +1,128 @@
+"""
+db.py — SQLite database module for storing scraped Upwork jobs.
+
+Uses Python's built-in sqlite3 (no extra dependencies).
+
+Schema Design Notes:
+─────────────────────
+• job_id (TEXT PRIMARY KEY) — Upwork's unique job ID (e.g., "2072926869803851328").
+  Using TEXT instead of INTEGER because these IDs are very large numbers that
+  could exceed SQLite's integer range, and we never do math on them.
+
+• skills (TEXT) — Stored as a comma-separated string (e.g., "Python, Django, React").
+  For Phase 1 this is simple and queryable with LIKE. If you later need to
+  filter by individual skills, consider a separate job_skills junction table.
+
+• fetched_at (TIMESTAMP) — Automatically set to the current UTC time when the
+  row is inserted. Useful for knowing when YOU scraped the job, vs. when it
+  was posted on Upwork (posted_time).
+
+Deduplication Strategy:
+───────────────────────
+We use INSERT OR IGNORE which silently skips the insert if a row with the
+same job_id (PRIMARY KEY) already exists. This is simpler and faster than
+checking job_exists() before every insert, and it's safe for concurrent use.
+We still provide job_exists() for cases where you want to check before
+doing other processing (e.g., deciding whether to post to Discord).
+"""
+
+import sqlite3
+from datetime import datetime, timezone
+
+# Database file lives in the project root
+DB_PATH = "jobs.db"
+
+
+def _get_connection() -> sqlite3.Connection:
+    """Create a connection to the SQLite database."""
+    conn = sqlite3.connect(DB_PATH)
+    # Return rows as sqlite3.Row objects so we can access columns by name
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    """
+    Create the jobs table if it doesn't already exist.
+
+    Call this once at startup. It's safe to call multiple times —
+    IF NOT EXISTS ensures it won't error on subsequent runs.
+    """
+    conn = _get_connection()
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS jobs (
+                job_id      TEXT PRIMARY KEY,   -- Upwork's unique job identifier
+                title       TEXT NOT NULL,       -- Job title (with H^ markers stripped)
+                description TEXT,                -- Full job description
+                budget      TEXT,                -- Budget string (e.g., "$800" or "$20-$25/hr")
+                skills      TEXT,                -- Comma-separated skill names
+                posted_time TEXT,                -- When the job was posted on Upwork (ISO 8601)
+                fetched_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP  -- When we scraped it
+            )
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def save_job(job_dict: dict) -> bool:
+    """
+    Insert a job into the database. Returns True if the job was newly inserted,
+    False if it already existed (was skipped).
+
+    Uses INSERT OR IGNORE: if a row with this job_id already exists, the insert
+    is silently skipped instead of raising an error. This is the simplest way
+    to handle deduplication — no need for a separate "check then insert" pattern,
+    which would also be vulnerable to race conditions.
+    """
+    conn = _get_connection()
+    try:
+        cursor = conn.execute(
+            """
+            INSERT OR IGNORE INTO jobs (job_id, title, description, budget, skills, posted_time, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_dict["job_id"],
+                job_dict["title"],
+                job_dict["description"],
+                job_dict.get("budget", ""),
+                job_dict.get("skills", ""),
+                job_dict.get("posted_time", ""),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        conn.commit()
+        # rowcount is 1 if a new row was inserted, 0 if it was ignored (duplicate)
+        return cursor.rowcount == 1
+    finally:
+        conn.close()
+
+
+def job_exists(job_id: str) -> bool:
+    """
+    Check if a job with this ID is already in the database.
+
+    Useful when you want to skip expensive processing (e.g., formatting
+    a Discord message) for jobs you've already seen, before even trying
+    to insert them.
+    """
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def get_job_count() -> int:
+    """Return the total number of jobs in the database."""
+    conn = _get_connection()
+    try:
+        row = conn.execute("SELECT COUNT(*) as cnt FROM jobs").fetchone()
+        return row["cnt"]
+    finally:
+        conn.close()
