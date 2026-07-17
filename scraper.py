@@ -61,7 +61,7 @@ class UpworkScraper:
             "variables": {
                 "requestVariables": {
                     "userQuery": search_query,
-                    "sort": "relevance+desc",
+                    "sort": "recency",
                     "highlight": True,
                     "paging": {
                         "offset": 0,
