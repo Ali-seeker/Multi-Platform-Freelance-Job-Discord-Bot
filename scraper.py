@@ -17,6 +17,7 @@ import requests
 from config import (
     GRAPHQL_URL,
     GRAPHQL_QUERY,
+    JOB_DETAILS_QUERY,
     REQUEST_HEADERS,
     COOKIES,
     JOBS_PER_PAGE,
@@ -150,6 +151,138 @@ class UpworkScraper:
 
         return parsed_jobs
 
+    def fetch_job_details(self, ciphertext: str) -> dict:
+        """
+        Fetch full details for a single job using its ciphertext ID.
+
+        This makes a SECOND GraphQL request (different from the search query)
+        to get the complete job description, client info, proposal count, etc.
+
+        Args:
+            ciphertext: The job's ciphertext ID (e.g., "~022072926869803851328")
+
+        Returns:
+            Dictionary with full job details, or empty dict on failure.
+        """
+        payload = {
+            "query": JOB_DETAILS_QUERY,
+            "variables": {
+                "id": ciphertext,
+                "isLoggedIn": False,
+            },
+        }
+
+        try:
+            response = self.session.post(
+                GRAPHQL_URL,
+                json=payload,
+                params={"alias": "gql-query-get-visitor-job-details"},
+                timeout=30,
+            )
+        except requests.exceptions.RequestException as e:
+            print(f"[ERROR] Job details request failed: {e}")
+            return {}
+
+        if response.status_code != 200:
+            print(f"[ERROR] Job details returned status {response.status_code}")
+            return {}
+
+        try:
+            data = response.json()
+        except ValueError:
+            print("[ERROR] Job details response was not valid JSON.")
+            return {}
+
+        try:
+            details = data["data"]["jobPubDetails"]
+        except (KeyError, TypeError) as e:
+            print(f"[ERROR] Unexpected job details structure: {e}")
+            return {}
+
+        return _parse_job_details(details)
+
+
+def _parse_job_details(raw_details: dict) -> dict:
+    """
+    Parse the raw job details response into a clean dictionary.
+
+    Extracts full description, client info, proposal count, experience level,
+    project duration, budget details, and payment verification status.
+
+    Args:
+        raw_details: The 'jobPubDetails' object from the GraphQL response
+
+    Returns:
+        Dictionary with all extracted detail fields.
+    """
+    opening = raw_details.get("opening", {})
+    buyer = raw_details.get("buyer", {})
+    buyer_extra = raw_details.get("buyerExtra", {})
+    info = opening.get("info", {})
+    stats = buyer.get("stats", {})
+    location = buyer.get("location", {})
+    company = buyer.get("company", {})
+    client_activity = opening.get("clientActivity", {})
+    engagement = opening.get("engagementDuration", {})
+    budget_info = opening.get("budget", {})
+    extended_budget = opening.get("extendedBudgetInfo", {})
+
+    # Calculate hire rate from stats
+    total_assignments = stats.get("totalAssignments", 0) or 0
+    total_with_hires = stats.get("totalJobsWithHires", 0) or 0
+    hire_rate = round((total_with_hires / total_assignments) * 100) if total_assignments > 0 else 0
+
+    # Format total spent
+    total_charges = stats.get("totalCharges", {})
+    total_spent = total_charges.get("amount", 0) if total_charges else 0
+
+    # Format budget string
+    job_type = info.get("type", "")
+    if job_type == "FIXED":
+        amount = budget_info.get("amount", 0) if budget_info else 0
+        budget_str = f"${amount:,.0f} (Fixed Price)" if amount else "Fixed Price (not listed)"
+    else:
+        hr_min = extended_budget.get("hourlyBudgetMin")
+        hr_max = extended_budget.get("hourlyBudgetMax")
+        if hr_min and hr_max:
+            budget_str = f"${hr_min}-${hr_max}/hr"
+        elif hr_max:
+            budget_str = f"Up to ${hr_max}/hr"
+        elif hr_min:
+            budget_str = f"From ${hr_min}/hr"
+        else:
+            budget_str = "Hourly (not listed)"
+
+    # Map contractorTier to human-readable level
+    tier_map = {
+        "ENTRY": "Entry Level",
+        "INTERMEDIATE": "Intermediate",
+        "EXPERT": "Expert",
+    }
+    contractor_tier = opening.get("contractorTier", "")
+    experience_level = tier_map.get(contractor_tier, contractor_tier or "Not specified")
+
+    return {
+        "description": opening.get("description", ""),
+        "job_type": job_type,
+        "budget": budget_str,
+        "experience_level": experience_level,
+        "project_duration": engagement.get("label", "Not specified"),
+        "category": opening.get("category", {}).get("name", ""),
+        "total_applicants": client_activity.get("totalApplicants", 0),
+        "total_hired": client_activity.get("totalHired", 0),
+        "positions_to_hire": client_activity.get("numberOfPositionsToHire", 1),
+        "client_location": f"{location.get('city', '')}, {location.get('country', '')}".strip(", "),
+        "client_country": location.get("country", ""),
+        "client_total_spent": total_spent,
+        "client_total_jobs": total_assignments,
+        "client_hire_rate": hire_rate,
+        "client_rating": stats.get("score", 0),
+        "client_member_since": company.get("contractDate", ""),
+        "payment_verified": buyer_extra.get("isPaymentMethodVerified", False),
+        "posted_on": opening.get("postedOn") or opening.get("publishTime", ""),
+    }
+
 
 def parse_job(raw_job: dict) -> dict:
     """
@@ -192,6 +325,19 @@ def parse_job(raw_job: dict) -> dict:
     job_data = raw_job.get("jobTile", {}).get("job", {})
     budget = _format_budget(job_data)
 
+    # --- Ciphertext (Phase 2) ---
+    # Needed to build the Upwork job URL and fetch full details
+    ciphertext = job_data.get("ciphertext", "")
+
+    # --- Experience Level ---
+    tier_map = {
+        "EntryLevel": "Entry Level",
+        "IntermediateLevel": "Intermediate",
+        "ExpertLevel": "Expert",
+    }
+    contractor_tier = job_data.get("contractorTier", "")
+    experience_level = tier_map.get(contractor_tier, contractor_tier or "Not specified")
+
     # --- Posted Time ---
     # Use publishTime (when clients can see it) over createTime (internal)
     posted_time = job_data.get("publishTime") or job_data.get("createTime", "")
@@ -203,6 +349,8 @@ def parse_job(raw_job: dict) -> dict:
         "budget": budget,
         "skills": skills,
         "posted_time": posted_time,
+        "ciphertext": ciphertext,
+        "experience_level": experience_level,
     }
 
 

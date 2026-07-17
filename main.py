@@ -1,5 +1,5 @@
 """
-main.py — Entry point for the Upwork Job Scraper (Phase 1).
+main.py — Entry point for the Upwork Job Scraper (Phase 1 CLI mode).
 
 Workflow:
   1. Initialize the SQLite database (creates table if first run)
@@ -8,11 +8,9 @@ Workflow:
   4. Loop through results, saving new jobs to the database
   5. Print a summary of what happened
 
-Future phases will add:
-  - Discord webhook posting for new jobs
-  - Auth token refresh when cookies expire
-  - Multiple search queries / URL support
-  - Scheduled polling (run every N minutes)
+Note:
+  For Phase 2 (Discord Bot mode), run `python discord_bot.py` instead of main.py.
+  Make sure to set DISCORD_TOKEN and DISCORD_CHANNEL_ID in your .env file first.
 """
 
 import sys

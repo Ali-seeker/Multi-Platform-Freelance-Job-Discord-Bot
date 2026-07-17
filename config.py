@@ -35,6 +35,14 @@ COOKIES = _require_env("UPWORK_COOKIES")
 SEARCH_QUERY = os.getenv("UPWORK_SEARCH_QUERY", "python developer")
 JOBS_PER_PAGE = int(os.getenv("UPWORK_JOBS_PER_PAGE", "10"))
 
+# --- Discord ---------------------------------------------------------------
+# Bot token from the Discord Developer Portal
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
+# Channel ID where job posts will be sent (right-click channel -> Copy ID)
+DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID") or os.getenv("CHANNEL_ID", "")
+# How often the bot polls for new jobs (seconds)
+POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
+
 # --- Upwork API Details ----------------------------------------------------
 # These are constants derived from the captured request, not user secrets.
 # They define *where* and *how* we talk to Upwork's API.
@@ -139,3 +147,227 @@ GRAPHQL_QUERY = """
     }
   }
 """
+
+# ---------------------------------------------------------------------------
+# Job Details GraphQL Query (Phase 2)
+# ---------------------------------------------------------------------------
+# This second query fetches FULL job details for a single job by its ciphertext
+# ID. It returns the complete description, client info, proposal count, etc.
+# Captured from DevTools: /api/graphql/v1?alias=gql-query-get-visitor-job-details
+JOB_DETAILS_QUERY = """
+  fragment JobPubOpeningInfoFragment on Job {
+    ciphertext
+    id
+    type
+    access
+    title
+    hideBudget
+    createdOn
+    notSureProjectDuration
+    notSureFreelancersToHire
+    notSureExperienceLevel
+    notSureLocationPreference
+    premium
+  }
+  fragment JobPubOpeningSegmentationDataFragment on JobSegmentation {
+    customValue
+    label
+    name
+    sortOrder
+    type
+    value
+    skill {
+      description
+      externalLink
+      prettyName
+      skill
+      id
+    }
+  }
+  fragment JobPubOpeningSandDataFragment on SandsData {
+    occupation {
+      freeText
+      ontologyId
+      prefLabel
+      id
+      uid: id
+    }
+    ontologySkills {
+      groupId
+      id
+      freeText
+      prefLabel
+      groupPrefLabel
+      relevance
+    }
+    additionalSkills {
+      groupId
+      id
+      freeText
+      prefLabel
+      relevance
+    }
+  }
+  fragment JobPubOpeningFragment on JobPubOpeningInfo {
+    status
+    postedOn
+    publishTime
+    sourcingTime
+    startDate
+    deliveryDate
+    workload
+    contractorTier
+    description
+    info {
+      ...JobPubOpeningInfoFragment
+    }
+    segmentationData {
+      ...JobPubOpeningSegmentationDataFragment
+    }
+    sandsData {
+      ...JobPubOpeningSandDataFragment
+    }
+    category {
+      name
+      urlSlug
+    }
+    categoryGroup {
+      name
+      urlSlug
+    }
+    budget {
+      amount
+      currencyCode
+    }
+    annotations {
+      customFields
+      tags
+    }
+    engagementDuration {
+      label
+      weeks
+    }
+    extendedBudgetInfo {
+      hourlyBudgetMin
+      hourlyBudgetMax
+      hourlyBudgetType
+    }
+    clientActivity {
+      lastBuyerActivity
+      totalApplicants
+      totalHired
+      totalInvitedToInterview
+      unansweredInvites
+      invitationsSent
+      numberOfPositionsToHire
+    }
+    deliverables
+    deadline
+    tools {
+      name
+    }
+  }
+  fragment JobPubBuyerInfoFragment on JobPubBuyerInfo {
+    location {
+      offsetFromUtcMillis
+      countryTimezone
+      city
+      country
+    }
+    stats {
+      totalAssignments
+      activeAssignmentsCount
+      hoursCount
+      feedbackCount
+      score
+      totalJobsWithHires
+      totalCharges {
+        amount
+      }
+    }
+    company {
+      name @include(if: $isLoggedIn)
+      companyId @include(if: $isLoggedIn)
+      isEDCReplicated
+      contractDate
+      profile {
+        industry
+        size
+      }
+    }
+    jobs {
+      openCount @include(if: $isLoggedIn)
+      postedCount @include(if: $isLoggedIn)
+      openJobs @include(if: $isLoggedIn) {
+        id
+        uid: id
+        isPtcPrivate
+        ciphertext
+        title
+        type
+      }
+    }
+    avgHourlyJobsRate @include(if: $isLoggedIn) {
+      amount
+    }
+  }
+  fragment JobQualificationsFragment on JobQualifications {
+    countries
+    earnings
+    groupRecno
+    languages
+    localDescription
+    localFlexibilityDescription
+    localMarket
+    minJobSuccessScore
+    minOdeskHours
+    onSiteType
+    prefEnglishSkill
+    regions
+    risingTalent
+    shouldHavePortfolio
+    states
+    tests
+    timezones
+    type
+    locationCheckRequired
+    group {
+      groupId
+      groupLogo
+      groupName
+    }
+    location {
+      city
+      country
+      countryTimezone
+      offsetFromUtcMillis
+      state
+      worldRegion
+    }
+    locations {
+      id
+      type
+    }
+    minHoursWeek @skip(if: $isLoggedIn)
+    readyToStartToday {
+      expiresAt
+    }
+  }
+  query JobPubDetailsQuery($id: ID!, $isLoggedIn: Boolean!) {
+    jobPubDetails(id: $id) {
+      opening {
+        ...JobPubOpeningFragment
+      }
+      qualifications {
+        ...JobQualificationsFragment
+      }
+      buyer {
+        ...JobPubBuyerInfoFragment
+      }
+      buyerExtra {
+        isPaymentMethodVerified
+      }
+    }
+  }
+"""
+
