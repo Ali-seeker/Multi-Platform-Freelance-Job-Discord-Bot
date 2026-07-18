@@ -33,8 +33,10 @@ from config import (
     DISCORD_CHANNEL_ID,
     SEARCH_QUERY,
     POLL_INTERVAL_SECONDS,
+    REQUEST_HEADERS,
 )
 from scraper import UpworkScraper
+from auth_manager import AuthManager, SessionExpiredError
 from db import init_db, save_job, job_exists, get_job_count
 
 
@@ -323,6 +325,10 @@ bot = discord.Client(intents=intents)
 # Create the scraper instance (reused across polling cycles)
 scraper = UpworkScraper()
 
+# Create the auth manager for automatic session refresh (Phase 3)
+# Uses the same User-Agent as the scraper for Cloudflare consistency
+auth_manager = AuthManager(user_agent=REQUEST_HEADERS["user-agent"])
+
 
 @bot.event
 async def on_ready():
@@ -359,8 +365,32 @@ async def poll_upwork():
         print("   -> Make sure the bot has access to this channel.")
         return
 
-    # Fetch jobs from Upwork
-    jobs = scraper.fetch_jobs(SEARCH_QUERY)
+    # --- Proactive refresh (secondary safety net) ---
+    if auth_manager.should_refresh():
+        print("[AUTH] Proactive scheduled refresh -- session lifetime exceeded")
+        result = auth_manager.refresh_session(reason="proactive scheduled refresh")
+        if result:
+            auth_header, cookie_string = result
+            scraper.update_session(auth_header, cookie_string)
+
+    # --- Fetch jobs with reactive refresh on 401/403 ---
+    try:
+        jobs = scraper.fetch_jobs(SEARCH_QUERY)
+    except SessionExpiredError:
+        print("[AUTH] Reactive refresh triggered by 401/403 on fetch_jobs")
+        result = auth_manager.refresh_session(reason="reactive refresh triggered by 401/403")
+        if result:
+            auth_header, cookie_string = result
+            scraper.update_session(auth_header, cookie_string)
+            try:
+                jobs = scraper.fetch_jobs(SEARCH_QUERY)  # Retry once with fresh session
+            except SessionExpiredError:
+                print("[AUTH] Retry after refresh still got 401/403 -- skipping this poll cycle")
+                return
+        else:
+            print("[AUTH] Reactive refresh failed -- skipping this poll cycle")
+            return
+
     if not jobs:
         return
 
@@ -386,7 +416,18 @@ async def poll_upwork():
             ciphertext = job.get("ciphertext", "")
             details = {}
             if ciphertext:
-                details = scraper.fetch_job_details(ciphertext)
+                try:
+                    details = scraper.fetch_job_details(ciphertext)
+                except SessionExpiredError:
+                    print(f"  [AUTH] Reactive refresh triggered by 401/403 on job details")
+                    result = auth_manager.refresh_session(reason="reactive refresh triggered by 401/403")
+                    if result:
+                        auth_header, cookie_string = result
+                        scraper.update_session(auth_header, cookie_string)
+                        try:
+                            details = scraper.fetch_job_details(ciphertext)  # Retry once
+                        except SessionExpiredError:
+                            print(f"  [AUTH] Retry after refresh still failed for job details")
 
             # Format and send the main message
             content_text, embed = format_job_message(job, details)

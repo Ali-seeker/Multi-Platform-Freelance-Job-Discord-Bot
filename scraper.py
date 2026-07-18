@@ -13,7 +13,9 @@ These are deliberately kept separate:
 """
 
 import re
+import os
 import requests
+from dotenv import set_key
 from config import (
     GRAPHQL_URL,
     GRAPHQL_QUERY,
@@ -22,6 +24,7 @@ from config import (
     COOKIES,
     JOBS_PER_PAGE,
 )
+from auth_manager import SessionExpiredError
 
 
 class UpworkScraper:
@@ -42,6 +45,51 @@ class UpworkScraper:
         # requests expects a dict, but the simplest approach is to set the
         # raw cookie header directly (Upwork sends a LOT of cookies)
         self.session.headers["cookie"] = COOKIES
+
+    def update_session(self, auth_header: str, cookie_string: str):
+        """
+        Update the session's Authorization header and Cookie string
+        with fresh values from AuthManager.
+
+        Also re-extracts the XSRF token and visitor_id from the new
+        cookie string since Cloudflare rotates them.
+
+        Args:
+            auth_header: Fresh Authorization header value
+                         (e.g., "Bearer oauth2v2_...")
+            cookie_string: Fresh full cookie header string
+        """
+        self.session.headers["authorization"] = auth_header
+        self.session.headers["cookie"] = cookie_string
+        # Re-extract XSRF token for CSRF protection header
+        xsrf = ""
+        for part in cookie_string.split(";"):
+            part = part.strip()
+            if part.startswith("XSRF-TOKEN="):
+                xsrf = part[len("XSRF-TOKEN="):]
+                break
+        if xsrf:
+            self.session.headers["x-odesk-csrf-token"] = xsrf
+        # Re-extract visitor_id
+        visitor_id = ""
+        for part in cookie_string.split(";"):
+            part = part.strip()
+            if part.startswith("visitor_id="):
+                visitor_id = part[len("visitor_id="):]
+                break
+        if visitor_id:
+            self.session.headers["vnd-eo-visitorid"] = visitor_id
+        
+        # Atomically write fresh credentials to .env
+        try:
+            env_path = os.path.join(os.path.dirname(__file__), '.env')
+            set_key(env_path, "UPWORK_BEARER_TOKEN", auth_header)
+            set_key(env_path, "UPWORK_COOKIES", cookie_string)
+            print("[AUTH] Credentials refreshed and saved to .env")
+        except Exception as e:
+            print(f"[AUTH] Warning: Failed to save refreshed credentials to .env: {e}")
+        
+        print("[AUTH] Session headers updated with fresh credentials")
 
     def fetch_jobs(self, search_query: str, count: int = JOBS_PER_PAGE) -> list[dict]:
         """
@@ -91,15 +139,14 @@ class UpworkScraper:
 
         # --- Handle HTTP error codes with clear messages ---
         if response.status_code == 401:
-            print("[ERROR] 401 Unauthorized -- your bearer token or cookies have expired!")
-            print("   -> Re-capture them from Chrome DevTools and update your .env file.")
-            return []
+            print("[ERROR] 401 Unauthorized -- bearer token or cookies have expired!")
+            print("   -> Triggering reactive session refresh...")
+            raise SessionExpiredError("401 Unauthorized")
 
         if response.status_code == 403:
             print("[ERROR] 403 Forbidden -- Upwork is blocking this request.")
-            print("   -> You may need fresh cookies, or Upwork detected bot-like behavior.")
             print(f"   Response preview: {response.text[:500]}")
-            return []
+            raise SessionExpiredError("403 Forbidden")
 
         if response.status_code != 200:
             print(f"[ERROR] Unexpected status code: {response.status_code}")
@@ -184,6 +231,9 @@ class UpworkScraper:
             return {}
 
         if response.status_code != 200:
+            if response.status_code in (401, 403):
+                print(f"[ERROR] Job details returned {response.status_code} -- triggering reactive refresh")
+                raise SessionExpiredError(f"{response.status_code} on job details")
             print(f"[ERROR] Job details returned status {response.status_code}")
             return {}
 
