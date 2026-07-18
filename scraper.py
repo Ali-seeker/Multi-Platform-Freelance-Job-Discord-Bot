@@ -215,6 +215,8 @@ def _parse_job_details(raw_details: dict) -> dict:
     Returns:
         Dictionary with all extracted detail fields.
     """
+    if not raw_details:
+        return {}
     opening = raw_details.get("opening", {})
     buyer = raw_details.get("buyer", {})
     buyer_extra = raw_details.get("buyerExtra", {})

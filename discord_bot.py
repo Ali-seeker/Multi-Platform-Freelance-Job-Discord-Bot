@@ -23,7 +23,9 @@ from datetime import datetime, timezone
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
+# pyrefly: ignore [missing-import]
 import discord
+# pyrefly: ignore [missing-import]
 from discord.ext import tasks
 
 from config import (
@@ -93,7 +95,7 @@ def build_job_url(ciphertext: str) -> str:
     return f"https://www.upwork.com/jobs/{ciphertext}"
 
 
-def format_job_message(job: dict, details: dict = None) -> str:
+def format_job_message(job: dict, details: dict = None) -> tuple[str, discord.Embed]:
     """
     Build a formatted Discord message for a new Upwork job posting.
 
@@ -106,7 +108,7 @@ def format_job_message(job: dict, details: dict = None) -> str:
         details: Optional full details dictionary from fetch_job_details()
 
     Returns:
-        Formatted string ready to send to Discord.
+        A tuple of (content_text, embed) to send to Discord.
     """
     title = job.get("title", "Untitled Job")
     ciphertext = job.get("ciphertext", "")
@@ -128,40 +130,57 @@ def format_job_message(job: dict, details: dict = None) -> str:
     if len(description) > 300:
         desc_preview += "..."
 
-    # Build the message sections
-    lines = []
-    lines.append(f"**{title}**")
-    lines.append("")
-    lines.append(f"**Posted:** {relative}")
-    lines.append(f"**Budget/Rate:** {budget}")
-    lines.append(f"**Level:** {experience_level}")
-    lines.append(f"**Time:** {current_time}")
+    # Determine color based on experience level
+    level_lower = experience_level.lower()
+    if "entry" in level_lower:
+        color = 0x2ECC71  # Green
+    elif "intermediate" in level_lower:
+        color = 0x3498DB  # Blue
+    elif "expert" in level_lower:
+        color = 0xF39C12  # Gold/Orange
+    else:
+        color = 0x2ECC71  # Default brand green
 
-    # Add details-specific fields if available
+    # Initialize Embed
+    embed = discord.Embed(
+        title=title,
+        url=job_url if job_url else None,
+        description=desc_preview if desc_preview else None,
+        color=color
+    )
+
+    # Fields
+    embed.add_field(name="Posted", value=relative, inline=True)
+    embed.add_field(name="Budget/Rate", value=budget, inline=True)
+    embed.add_field(name="Level", value=experience_level, inline=True)
+    embed.add_field(name="Time", value=current_time, inline=True)
+
+    # Proposals and client info depend on details
     if details:
-        applicants = details.get("total_applicants", 0)
-        lines.append(f"**Proposals:** {applicants}")
-
-        # Client info
+        proposals = str(details.get("total_applicants", 0))
         payment = "Verified" if details.get("payment_verified") else "Not Verified"
         location = details.get("client_location", "Unknown")
         total_spent = details.get("client_total_spent", 0)
         spent_str = f"${total_spent:,.2f}" if total_spent else "$0"
-        lines.append(f"**Client Info:** Payment {payment} | {location} | {spent_str} spent")
+        client_info = f"Payment {payment} | {location} | {spent_str} spent"
     else:
-        lines.append("**Proposals:** Loading...")
-        lines.append("**Client Info:** Loading...")
+        proposals = "Loading..."
+        client_info = "Loading..."
 
-    lines.append("")
-    lines.append(f"**Skills:** {skills}")
-    lines.append("")
-    lines.append(f"> {desc_preview}")
-    lines.append("")
+    embed.add_field(name="Proposals", value=proposals, inline=True)
+    embed.add_field(name="Client Info", value=client_info, inline=False)
 
-    if job_url:
-        lines.append(f"**[Apply Here]({job_url})**")
+    if skills:
+        embed.add_field(name="Skills", value=skills, inline=False)
 
-    return "\n".join(lines)
+    # Footer and Timestamp
+    embed.set_footer(text="Upwork Job Bot")
+    embed.timestamp = discord.utils.utcnow()
+
+    # Compact one-line content for forum list view preview
+    content = f"Posted: {relative} | {budget} | {experience_level} | {proposals} proposals"
+
+    return content, embed
 
 
 def format_thread_details(details: dict, job: dict) -> str:
@@ -348,72 +367,78 @@ async def poll_upwork():
     new_count = 0
     for job in jobs:
         job_id = job.get("job_id", "")
-
-        # Skip if we've already seen this job
-        if job_exists(job_id):
-            continue
-
-        # Save to database FIRST (so we don't re-post if Discord fails)
-        was_saved = save_job(job)
-        if not was_saved:
-            continue
-
-        new_count += 1
         title = job.get("title", "Untitled")
-        print(f"  [NEW] {title[:60]}")
 
-        # Fetch full details for this job
-        ciphertext = job.get("ciphertext", "")
-        details = {}
-        if ciphertext:
-            details = scraper.fetch_job_details(ciphertext)
-
-        # Format and send the main message
-        message_text = format_job_message(job, details)
-        thread_name = f"Job: {title[:80]}"
-        thread = None
-
-        if isinstance(channel, discord.ForumChannel):
-            # Forum channel requires creating a thread directly with the content
-            try:
-                thread_with_msg = await send_with_retry(
-                    channel.create_thread,
-                    name=thread_name,
-                    content=message_text,
-                    auto_archive_duration=60,
-                )
-                if thread_with_msg:
-                    thread = thread_with_msg.thread
-            except Exception as e:
-                print(f"  [ERROR] Failed to create forum thread: {e}")
-                continue
-        else:
-            # Standard TextChannel
-            sent_message = await send_with_retry(channel.send, message_text)
-            if sent_message is None:
-                print(f"  [ERROR] Failed to post job: {title[:40]}")
+        try:
+            # Skip if we've already seen this job
+            if job_exists(job_id):
                 continue
 
-            if details:
+            # Save to database FIRST (so we don't re-post if Discord fails)
+            was_saved = save_job(job)
+            if not was_saved:
+                continue
+
+            new_count += 1
+            print(f"  [NEW] {title[:60]}")
+
+            # Fetch full details for this job
+            ciphertext = job.get("ciphertext", "")
+            details = {}
+            if ciphertext:
+                details = scraper.fetch_job_details(ciphertext)
+
+            # Format and send the main message
+            content_text, embed = format_job_message(job, details)
+            thread_name = f"Job: {title[:80]}"
+            thread = None
+
+            if isinstance(channel, discord.ForumChannel):
+                # Forum channel requires creating a thread directly with the content
                 try:
-                    thread = await send_with_retry(
-                        sent_message.create_thread,
+                    thread_with_msg = await send_with_retry(
+                        channel.create_thread,
                         name=thread_name,
+                        content=content_text,
+                        embed=embed,
                         auto_archive_duration=60,
                     )
+                    if thread_with_msg:
+                        thread = thread_with_msg.thread
                 except Exception as e:
-                    print(f"  [ERROR] Failed to create thread: {e}")
-
-        # Post the thread details
-        if thread and details:
-            thread_text = format_thread_details(details, job)
-            # Split into multiple messages if over Discord's 2000 char limit
-            if len(thread_text) > 2000:
-                parts = _split_message(thread_text)
-                for part in parts:
-                    await send_with_retry(thread.send, part)
+                    print(f"  [ERROR] Failed to create forum thread: {e}")
+                    continue
             else:
-                await send_with_retry(thread.send, thread_text)
+                # Standard TextChannel
+                sent_message = await send_with_retry(channel.send, content=content_text, embed=embed)
+                if sent_message is None:
+                    print(f"  [ERROR] Failed to post job: {title[:40]}")
+                    continue
+
+                if details:
+                    try:
+                        thread = await send_with_retry(
+                            sent_message.create_thread,
+                            name=thread_name,
+                            auto_archive_duration=60,
+                        )
+                    except Exception as e:
+                        print(f"  [ERROR] Failed to create thread: {e}")
+
+            # Post the thread details
+            if thread and details:
+                thread_text = format_thread_details(details, job)
+                # Split into multiple messages if over Discord's 2000 char limit
+                if len(thread_text) > 2000:
+                    parts = _split_message(thread_text)
+                    for part in parts:
+                        await send_with_retry(thread.send, part)
+                else:
+                    await send_with_retry(thread.send, thread_text)
+        except Exception as e:
+            print(f"  [ERROR] Exception raised while processing job {job_id} ({title}): {e}")
+            continue
+
 
     if new_count > 0:
         print(f"[SUMMARY] Posted {new_count} new jobs to Discord. "
