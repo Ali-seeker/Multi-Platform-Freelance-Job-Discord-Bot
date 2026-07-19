@@ -14,6 +14,7 @@ These are deliberately kept separate:
 
 import re
 import os
+import time
 import requests
 from dotenv import set_key
 from config import (
@@ -25,6 +26,9 @@ from config import (
     JOBS_PER_PAGE,
 )
 from auth_manager import SessionExpiredError
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class UpworkScraper:
@@ -85,11 +89,11 @@ class UpworkScraper:
             env_path = os.path.join(os.path.dirname(__file__), '.env')
             set_key(env_path, "UPWORK_BEARER_TOKEN", auth_header)
             set_key(env_path, "UPWORK_COOKIES", cookie_string)
-            print("[AUTH] Credentials refreshed and saved to .env")
+            logger.info("Credentials refreshed and saved to .env")
         except Exception as e:
-            print(f"[AUTH] Warning: Failed to save refreshed credentials to .env: {e}")
+            logger.warning(f"Failed to save refreshed credentials to .env: {e}", exc_info=True)
         
-        print("[AUTH] Session headers updated with fresh credentials")
+        logger.info("Session headers updated with fresh credentials")
 
     def fetch_jobs(self, search_query: str, count: int = JOBS_PER_PAGE) -> list[dict]:
         """
@@ -120,45 +124,44 @@ class UpworkScraper:
             },
         }
 
-        try:
-            response = self.session.post(
-                GRAPHQL_URL,
-                json=payload,
-                params={"alias": "visitorJobSearch"},
-                timeout=30,
-            )
-        except requests.exceptions.ConnectionError:
-            print("[ERROR] Connection error -- check your internet connection.")
-            return []
-        except requests.exceptions.Timeout:
-            print("[ERROR] Request timed out -- Upwork may be slow or blocking you.")
-            return []
-        except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Request failed: {e}")
-            return []
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self.session.post(
+                    GRAPHQL_URL,
+                    json=payload,
+                    params={"alias": "visitorJobSearch"},
+                    timeout=30,
+                )
+                break  # If successful, break out of retry loop
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                logger.warning(f"Network error during fetch_jobs (attempt {attempt+1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    logger.error("Max retries reached for network error in fetch_jobs.")
+                    return []
+                time.sleep(2 ** attempt)
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Request failed: {e}", exc_info=True)
+                return []
 
         # --- Handle HTTP error codes with clear messages ---
         if response.status_code == 401:
-            print("[ERROR] 401 Unauthorized -- bearer token or cookies have expired!")
-            print("   -> Triggering reactive session refresh...")
+            logger.warning("401 Unauthorized -- bearer token or cookies have expired! Triggering reactive session refresh...")
             raise SessionExpiredError("401 Unauthorized")
 
         if response.status_code == 403:
-            print("[ERROR] 403 Forbidden -- Upwork is blocking this request.")
-            print(f"   Response preview: {response.text[:500]}")
+            logger.warning(f"403 Forbidden -- Upwork is blocking this request. Response preview: {response.text[:500]}")
             raise SessionExpiredError("403 Forbidden")
 
         if response.status_code != 200:
-            print(f"[ERROR] Unexpected status code: {response.status_code}")
-            print(f"   Response: {response.text[:500]}")
+            logger.error(f"Unexpected status code: {response.status_code} - {response.text[:500]}")
             return []
 
         # --- Parse the JSON response ---
         try:
             data = response.json()
         except ValueError:
-            print("[ERROR] Response was not valid JSON.")
-            print(f"   Raw response: {response.text[:500]}")
+            logger.error(f"Response was not valid JSON. Raw response: {response.text[:500]}")
             return []
 
         # Navigate the nested GraphQL response structure
@@ -168,22 +171,21 @@ class UpworkScraper:
             results = search_data.get("results", [])
             paging = search_data.get("paging", {})
         except (KeyError, TypeError) as e:
-            print(f"[ERROR] Unexpected response structure: {e}")
-            print(f"   Response keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
+            logger.error(f"Unexpected response structure: {e}", exc_info=True)
+            logger.error(f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
             # Check for GraphQL-level errors
             if "errors" in data:
                 for err in data["errors"]:
-                    print(f"   GraphQL error: {err.get('message', err)}")
+                    logger.error(f"GraphQL error: {err.get('message', err)}")
             return []
 
         if not results:
-            print("[WARN] No jobs found -- the search returned empty results.")
-            print(f"   Total available: {paging.get('total', 'unknown')}")
+            logger.warning(f"No jobs found -- the search returned empty results. Total available: {paging.get('total', 'unknown')}")
             return []
 
         # Log what we got
         total = paging.get("total", "?")
-        print(f"[OK] Fetched {len(results)} jobs (out of {total} total matches)")
+        logger.info(f"Fetched {len(results)} jobs (out of {total} total matches)")
 
         # Parse each raw job into a clean dictionary
         parsed_jobs = []
@@ -194,7 +196,7 @@ class UpworkScraper:
             except Exception as e:
                 # Don't let one bad job kill the whole batch
                 job_id = raw_job.get("id", "unknown")
-                print(f"[WARN] Skipping job {job_id} -- parse error: {e}")
+                logger.warning(f"Skipping job {job_id} -- parse error: {e}")
 
         return parsed_jobs
 
@@ -219,34 +221,43 @@ class UpworkScraper:
             },
         }
 
-        try:
-            response = self.session.post(
-                GRAPHQL_URL,
-                json=payload,
-                params={"alias": "gql-query-get-visitor-job-details"},
-                timeout=30,
-            )
-        except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Job details request failed: {e}")
-            return {}
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self.session.post(
+                    GRAPHQL_URL,
+                    json=payload,
+                    params={"alias": "gql-query-get-visitor-job-details"},
+                    timeout=30,
+                )
+                break
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                logger.warning(f"Network error during fetch_job_details (attempt {attempt+1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    logger.error("Max retries reached for network error in fetch_job_details.")
+                    return {}
+                time.sleep(2 ** attempt)
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Job details request failed: {e}", exc_info=True)
+                return {}
 
         if response.status_code != 200:
             if response.status_code in (401, 403):
-                print(f"[ERROR] Job details returned {response.status_code} -- triggering reactive refresh")
+                logger.warning(f"Job details returned {response.status_code} -- triggering reactive refresh")
                 raise SessionExpiredError(f"{response.status_code} on job details")
-            print(f"[ERROR] Job details returned status {response.status_code}")
+            logger.error(f"Job details returned status {response.status_code}")
             return {}
 
         try:
             data = response.json()
         except ValueError:
-            print("[ERROR] Job details response was not valid JSON.")
+            logger.error("Job details response was not valid JSON.")
             return {}
 
         try:
             details = data["data"]["jobPubDetails"]
         except (KeyError, TypeError) as e:
-            print(f"[ERROR] Unexpected job details structure: {e}")
+            logger.error(f"Unexpected job details structure: {e}", exc_info=True)
             return {}
 
         return _parse_job_details(details)

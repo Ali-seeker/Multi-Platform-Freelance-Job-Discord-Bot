@@ -24,6 +24,9 @@ import time
 import json
 from datetime import datetime
 
+from logger import get_logger
+logger = get_logger(__name__)
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
@@ -123,25 +126,25 @@ class AuthManager:
         retry_delay = 5  # seconds
 
         for attempt in range(1, max_retries + 1):
-            print(f"[AUTH] Session refresh ({reason}) — attempt {attempt}/{max_retries}")
+            logger.info(f"Session refresh ({reason}) — attempt {attempt}/{max_retries}")
 
             try:
                 auth_header, cookie_string = self._do_refresh()
                 self.session_timestamp = datetime.now()
-                print(f"[AUTH] Session refresh SUCCESS ({reason})")
-                print(f"[AUTH]   Bearer token length: {len(auth_header)} chars")
-                print(f"[AUTH]   Cookie length: {len(cookie_string)} chars")
+                logger.info(f"Session refresh SUCCESS ({reason})")
+                logger.info(f"  Bearer token length: {len(auth_header)} chars")
+                logger.info(f"  Cookie length: {len(cookie_string)} chars")
                 return auth_header, cookie_string
 
             except Exception as e:
-                print(f"[AUTH] Session refresh FAILED on attempt {attempt}/{max_retries}: {e}")
+                logger.error(f"Session refresh FAILED on attempt {attempt}/{max_retries}: {e}")
                 if attempt < max_retries:
-                    print(f"[AUTH]   Retrying in {retry_delay}s...")
+                    logger.warning(f"  Retrying in {retry_delay}s...")
                     time.sleep(retry_delay)
 
-        print(f"[CRITICAL] All {max_retries} session refresh attempts failed ({reason}).")
-        print(f"[CRITICAL]   Bot will continue with existing (possibly stale) session.")
-        print(f"[CRITICAL]   Will try again on the next scheduled check or 401/403.")
+        logger.critical(f"All {max_retries} session refresh attempts failed ({reason}).")
+        logger.critical("  Bot will continue with existing (possibly stale) session.")
+        logger.critical("  Will try again on the next scheduled check or 401/403.")
         return None
 
     def _do_refresh(self) -> tuple[str, str]:
@@ -163,11 +166,11 @@ class AuthManager:
             driver.execute_cdp_cmd("Network.enable", {})
 
             # Navigate to or refresh the public Upwork search page
-            print(f"[AUTH]   Refreshing/Navigating to Upwork search page...")
+            logger.info("  Refreshing/Navigating to Upwork search page...")
             driver.get(self.UPWORK_SEARCH_URL)
 
             # Wait for cookies and network requests to capture
-            print("[AUTH]   Waiting for network requests to settle...")
+            logger.info("  Waiting for network requests to settle...")
             time.sleep(5)
 
             # Extract cookies from the browser session
@@ -194,9 +197,9 @@ class AuthManager:
             if driver:
                 try:
                     driver.quit() # Detaches debugger connection without closing browser
-                    print("[AUTH]   Detached from remote browser.")
+                    logger.info("  Detached from remote browser.")
                 except Exception as e:
-                    print(f"[AUTH]   Warning: debugger detach cleanup error: {e}")
+                    logger.warning(f"  Warning: debugger detach cleanup error: {e}")
 
     def _create_driver(self) -> webdriver.Chrome:
         """
@@ -228,7 +231,7 @@ class AuthManager:
         service = ChromeService(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
 
-        print("[AUTH] Connected to running Chrome instance via Remote Debugging.")
+        logger.info("Connected to running Chrome instance via Remote Debugging.")
         return driver
 
     def _extract_cookies_string(self, driver: webdriver.Chrome) -> str:
@@ -249,11 +252,11 @@ class AuthManager:
         key_cookies = ["cf_clearance", "__cf_bm", "XSRF-TOKEN", "visitor_id"]
         found = [name for name in key_cookies if name in cookie_names]
         missing = [name for name in key_cookies if name not in cookie_names]
-        print(f"[AUTH]   Cookies extracted: {len(cookies)} total")
+        logger.info(f"  Cookies extracted: {len(cookies)} total")
         if found:
-            print(f"[AUTH]   Key cookies present: {', '.join(found)}")
+            logger.info(f"  Key cookies present: {', '.join(found)}")
         if missing:
-            print(f"[AUTH]   Key cookies MISSING: {', '.join(missing)}")
+            logger.info(f"  Key cookies MISSING: {', '.join(missing)}")
 
         return cookie_string
 
@@ -267,7 +270,7 @@ class AuthManager:
         try:
             logs = driver.get_log("performance")
         except Exception as e:
-            print(f"[AUTH]   Warning: could not get performance logs: {e}")
+            logger.warning(f"  Warning: could not get performance logs: {e}")
             return ""
 
         for entry in logs:
@@ -292,13 +295,13 @@ class AuthManager:
                 # Check for the Authorization header (case-insensitive search)
                 for header_name, header_value in headers.items():
                     if header_name.lower() == "authorization" and "bearer" in header_value.lower():
-                        print(f"[AUTH]   Found Bearer token in request to: {url[:80]}")
+                        logger.info(f"  Found Bearer token in request to: {url[:80]}")
                         return header_value
 
             except (json.JSONDecodeError, KeyError, TypeError):
                 continue
 
-        print("[AUTH]   Warning: No Authorization header found in any captured network request.")
+        logger.warning("  Warning: No Authorization header found in any captured network request.")
         return ""
 
 

@@ -17,6 +17,9 @@ Requires DISCORD_TOKEN and DISCORD_CHANNEL_ID in your .env file.
 import sys
 import io
 import asyncio
+import psutil
+import signal
+import time
 from datetime import datetime, timezone
 
 # Fix Windows console encoding
@@ -28,16 +31,21 @@ import discord
 # pyrefly: ignore [missing-import]
 from discord.ext import tasks
 
+import urllib.parse
 from config import (
     DISCORD_TOKEN,
     DISCORD_CHANNEL_ID,
-    SEARCH_QUERY,
+    TRACKED_URLS,
     POLL_INTERVAL_SECONDS,
     REQUEST_HEADERS,
 )
 from scraper import UpworkScraper
 from auth_manager import AuthManager, SessionExpiredError
-from db import init_db, save_job, job_exists, get_job_count
+from db import init_db, save_job, job_exists, get_job_count, cleanup_old_jobs
+from monitor import global_state, start_dashboard
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -303,12 +311,12 @@ async def send_with_retry(coro_func, *args, max_retries: int = 3, **kwargs):
         except discord.HTTPException as e:
             if e.status == 429:
                 retry_after = e.retry_after if hasattr(e, "retry_after") else 5.0
-                print(f"[RATE LIMIT] Discord 429 -- waiting {retry_after:.1f}s (attempt {attempt + 1}/{max_retries})")
+                logger.warning(f"Discord 429 rate limit -- waiting {retry_after:.1f}s (attempt {attempt + 1}/{max_retries})")
                 await asyncio.sleep(retry_after)
             else:
-                print(f"[ERROR] Discord HTTP error {e.status}: {e.text}")
+                logger.error(f"Discord HTTP error {e.status}: {e.text}")
                 return None
-    print("[ERROR] Max retries reached for Discord API call.")
+    logger.error("Max retries reached for Discord API call.")
     return None
 
 
@@ -333,157 +341,212 @@ auth_manager = AuthManager(user_agent=REQUEST_HEADERS["user-agent"])
 @bot.event
 async def on_ready():
     """Called when the bot successfully connects to Discord."""
-    print(f"[BOT] Logged in as {bot.user}")
-    print(f"[BOT] Monitoring channel: {DISCORD_CHANNEL_ID}")
-    print(f"[BOT] Polling every {POLL_INTERVAL_SECONDS} seconds")
-    print(f"[BOT] Search query: \"{SEARCH_QUERY}\"")
-    print()
+    logger.info(f"Logged in as {bot.user}")
+    logger.info(f"Loaded {len(TRACKED_URLS)} tracked URLs from config.json")
+    logger.info(f"Polling every {POLL_INTERVAL_SECONDS} seconds")
 
     # Initialize the database
     init_db()
-    print(f"[DB] Database ready -- {get_job_count()} existing jobs")
+    logger.info(f"Database ready -- {get_job_count()} existing jobs")
 
-    # Start the polling loop
+    # Start dashboard
+    start_dashboard()
+    logger.info("Monitoring dashboard started on port 5000")
+
+    # Update state
+    global_state["active_urls"] = len(TRACKED_URLS)
+
+    # Start the polling loops
     if not poll_upwork.is_running():
         poll_upwork.start()
+    if not memory_monitor.is_running():
+        memory_monitor.start()
+    if not db_cleanup_task.is_running():
+        db_cleanup_task.start()
+
+@tasks.loop(minutes=30)
+async def memory_monitor():
+    mem_mb = psutil.Process().memory_info().rss / (1024 * 1024)
+    global_state["memory_usage_mb"] = mem_mb
+    if mem_mb > 400:
+        logger.warning(f"High memory usage detected: {mem_mb:.2f} MB")
+
+@tasks.loop(hours=24)
+async def db_cleanup_task():
+    logger.info("Running daily DB cleanup...")
+    cleanup_old_jobs(14)
 
 
 @tasks.loop(seconds=POLL_INTERVAL_SECONDS)
 async def poll_upwork():
     """
     Background task that polls Upwork for new jobs every N seconds.
-
-    For each new job found:
-      1. Saves it to the SQLite database
-      2. Fetches full job details (second GraphQL request)
-      3. Posts a formatted message to the Discord channel
-      4. Creates a thread on that message with full details
+    Iterates over all tracked URLs in config.json sequentially.
     """
-    channel = bot.get_channel(int(DISCORD_CHANNEL_ID))
-    if not channel:
-        print(f"[ERROR] Could not find channel {DISCORD_CHANNEL_ID}")
-        print("   -> Make sure the bot has access to this channel.")
+    if not TRACKED_URLS:
+        logger.error("No tracked_urls found in config.json")
         return
 
+    total_new_count = 0
+    
     # --- Proactive refresh (secondary safety net) ---
     if auth_manager.should_refresh():
-        print("[AUTH] Proactive scheduled refresh -- session lifetime exceeded")
+        logger.info("Proactive scheduled refresh -- session lifetime exceeded")
         result = auth_manager.refresh_session(reason="proactive scheduled refresh")
         if result:
             auth_header, cookie_string = result
             scraper.update_session(auth_header, cookie_string)
+            global_state["last_token_refresh"] = datetime.now().isoformat()
 
-    # --- Fetch jobs with reactive refresh on 401/403 ---
-    try:
-        jobs = scraper.fetch_jobs(SEARCH_QUERY)
-    except SessionExpiredError:
-        print("[AUTH] Reactive refresh triggered by 401/403 on fetch_jobs")
-        result = auth_manager.refresh_session(reason="reactive refresh triggered by 401/403")
-        if result:
-            auth_header, cookie_string = result
-            scraper.update_session(auth_header, cookie_string)
-            try:
-                jobs = scraper.fetch_jobs(SEARCH_QUERY)  # Retry once with fresh session
-            except SessionExpiredError:
-                print("[AUTH] Retry after refresh still got 401/403 -- skipping this poll cycle")
-                return
-        else:
-            print("[AUTH] Reactive refresh failed -- skipping this poll cycle")
-            return
+    for url_config in TRACKED_URLS:
+        url_source = url_config["url"]
+        channel_id = url_config["channel_id"]
+        label = url_config["label"]
 
-    if not jobs:
-        return
-
-    new_count = 0
-    for job in jobs:
-        job_id = job.get("job_id", "")
-        title = job.get("title", "Untitled")
-
-        try:
-            # Skip if we've already seen this job
-            if job_exists(job_id):
-                continue
-
-            # Save to database FIRST (so we don't re-post if Discord fails)
-            was_saved = save_job(job)
-            if not was_saved:
-                continue
-
-            new_count += 1
-            print(f"  [NEW] {title[:60]}")
-
-            # Fetch full details for this job
-            ciphertext = job.get("ciphertext", "")
-            details = {}
-            if ciphertext:
-                try:
-                    details = scraper.fetch_job_details(ciphertext)
-                except SessionExpiredError:
-                    print(f"  [AUTH] Reactive refresh triggered by 401/403 on job details")
-                    result = auth_manager.refresh_session(reason="reactive refresh triggered by 401/403")
-                    if result:
-                        auth_header, cookie_string = result
-                        scraper.update_session(auth_header, cookie_string)
-                        try:
-                            details = scraper.fetch_job_details(ciphertext)  # Retry once
-                        except SessionExpiredError:
-                            print(f"  [AUTH] Retry after refresh still failed for job details")
-
-            # Format and send the main message
-            content_text, embed = format_job_message(job, details)
-            thread_name = f"Job: {title[:80]}"
-            thread = None
-
-            if isinstance(channel, discord.ForumChannel):
-                # Forum channel requires creating a thread directly with the content
-                try:
-                    thread_with_msg = await send_with_retry(
-                        channel.create_thread,
-                        name=thread_name,
-                        content=content_text,
-                        embed=embed,
-                        auto_archive_duration=60,
-                    )
-                    if thread_with_msg:
-                        thread = thread_with_msg.thread
-                except Exception as e:
-                    print(f"  [ERROR] Failed to create forum thread: {e}")
-                    continue
-            else:
-                # Standard TextChannel
-                sent_message = await send_with_retry(channel.send, content=content_text, embed=embed)
-                if sent_message is None:
-                    print(f"  [ERROR] Failed to post job: {title[:40]}")
-                    continue
-
-                if details:
-                    try:
-                        thread = await send_with_retry(
-                            sent_message.create_thread,
-                            name=thread_name,
-                            auto_archive_duration=60,
-                        )
-                    except Exception as e:
-                        print(f"  [ERROR] Failed to create thread: {e}")
-
-            # Post the thread details
-            if thread and details:
-                thread_text = format_thread_details(details, job)
-                # Split into multiple messages if over Discord's 2000 char limit
-                if len(thread_text) > 2000:
-                    parts = _split_message(thread_text)
-                    for part in parts:
-                        await send_with_retry(thread.send, part)
-                else:
-                    await send_with_retry(thread.send, thread_text)
-        except Exception as e:
-            print(f"  [ERROR] Exception raised while processing job {job_id} ({title}): {e}")
+        channel = bot.get_channel(int(channel_id))
+        if not channel:
+            logger.error(f"Could not find channel {channel_id} for {label}")
+            global_state["errors_last_hour"] += 1
             continue
 
+        logger.info(f"Checking '{label}' ({url_source})...")
 
-    if new_count > 0:
-        print(f"[SUMMARY] Posted {new_count} new jobs to Discord. "
-              f"Total in DB: {get_job_count()}")
+        # Extract search query from the URL (q parameter)
+        parsed_url = urllib.parse.urlparse(url_source)
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+        search_query = query_params.get('q', [''])[0]
+
+        if not search_query:
+            logger.warning(f"No 'q' parameter found in {url_source}. Using label as fallback.")
+            search_query = label
+
+        # --- Fetch jobs with reactive refresh on 401/403 ---
+        try:
+            jobs = scraper.fetch_jobs(search_query)
+        except SessionExpiredError:
+            logger.info(f"Reactive refresh triggered by 401/403 on fetch_jobs ({label})")
+            result = auth_manager.refresh_session(reason="reactive refresh triggered by 401/403")
+            if result:
+                auth_header, cookie_string = result
+                scraper.update_session(auth_header, cookie_string)
+                global_state["last_token_refresh"] = datetime.now().isoformat()
+                try:
+                    jobs = scraper.fetch_jobs(search_query)  # Retry once with fresh session
+                except SessionExpiredError:
+                    logger.warning(f"Retry after refresh still got 401/403 -- skipping {label}")
+                    global_state["errors_last_hour"] += 1
+                    continue
+            else:
+                logger.error(f"Reactive refresh failed -- skipping {label}")
+                global_state["errors_last_hour"] += 1
+                continue
+
+        if not jobs:
+            continue
+
+        new_count = 0
+        for job in jobs:
+            job_id = job.get("job_id", "")
+            title = job.get("title", "Untitled")
+
+            try:
+                # Skip if we've already seen this job FOR THIS URL SOURCE
+                if job_exists(job_id, url_source):
+                    continue
+
+                # Save to database FIRST
+                was_saved = save_job(job, url_source)
+                if not was_saved:
+                    continue
+
+                new_count += 1
+                total_new_count += 1
+                global_state["jobs_posted_last_hour"] += 1
+                logger.info(f"  [NEW] {title[:60]}")
+
+                # Fetch full details for this job
+                ciphertext = job.get("ciphertext", "")
+                details = {}
+                if ciphertext:
+                    try:
+                        details = scraper.fetch_job_details(ciphertext)
+                    except SessionExpiredError:
+                        logger.info("Reactive refresh triggered by 401/403 on job details")
+                        result = auth_manager.refresh_session(reason="reactive refresh triggered by 401/403")
+                        if result:
+                            auth_header, cookie_string = result
+                            scraper.update_session(auth_header, cookie_string)
+                            global_state["last_token_refresh"] = datetime.now().isoformat()
+                            try:
+                                details = scraper.fetch_job_details(ciphertext)  # Retry once
+                            except SessionExpiredError:
+                                logger.warning("Retry after refresh still failed for job details")
+
+                # Format and send the main message
+                content_text, embed = format_job_message(job, details)
+                thread_name = f"Job: {title[:80]}"
+                thread = None
+
+                if isinstance(channel, discord.ForumChannel):
+                    # Forum channel requires creating a thread directly with the content
+                    try:
+                        thread_with_msg = await send_with_retry(
+                            channel.create_thread,
+                            name=thread_name,
+                            content=content_text,
+                            embed=embed,
+                            auto_archive_duration=60,
+                        )
+                        if thread_with_msg:
+                            thread = thread_with_msg.thread
+                    except Exception as e:
+                        logger.error(f"Failed to create forum thread: {e}")
+                        global_state["errors_last_hour"] += 1
+                        continue
+                else:
+                    # Standard TextChannel
+                    sent_message = await send_with_retry(channel.send, content=content_text, embed=embed)
+                    if sent_message is None:
+                        logger.error(f"Failed to post job: {title[:40]}")
+                        global_state["errors_last_hour"] += 1
+                        continue
+
+                    if details:
+                        try:
+                            thread = await send_with_retry(
+                                sent_message.create_thread,
+                                name=thread_name,
+                                auto_archive_duration=60,
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to create thread: {e}")
+                            global_state["errors_last_hour"] += 1
+
+                # Post the thread details
+                if thread and details:
+                    thread_text = format_thread_details(details, job)
+                    # Split into multiple messages if over Discord's 2000 char limit
+                    if len(thread_text) > 2000:
+                        parts = _split_message(thread_text)
+                        for part in parts:
+                            await send_with_retry(thread.send, part)
+                    else:
+                        await send_with_retry(thread.send, thread_text)
+            except Exception as e:
+                logger.error(f"Exception raised while processing job {job_id} ({title}): {e}", exc_info=True)
+                global_state["errors_last_hour"] += 1
+                continue
+        
+        logger.info(f"Summary for '{label}': Found {new_count} new jobs.")
+        
+        # Pause briefly before checking the next URL to avoid slamming the API
+        await asyncio.sleep(2)
+
+    if total_new_count > 0:
+        logger.info(f"Completed poll cycle. Posted {total_new_count} new jobs to Discord. Total in DB: {get_job_count()}")
+
+    # Refresh memory stats
+    global_state["memory_usage_mb"] = psutil.Process().memory_info().rss / (1024 * 1024)
 
 
 def _split_message(text: str, limit: int = 1900) -> list[str]:
@@ -522,19 +585,35 @@ async def before_poll():
 # Entry Point
 # ---------------------------------------------------------------------------
 
+def shutdown_handler(signum, frame):
+    """Handle graceful shutdown for signals."""
+    logger.info("Received shutdown signal. Closing gracefully...")
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        loop.create_task(bot.close())
+    else:
+        sys.exit(0)
+
+
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
-        print("[ERROR] DISCORD_TOKEN is not set in your .env file.")
-        print("   -> Get your bot token from https://discord.com/developers/applications")
+        logger.error("DISCORD_TOKEN is not set in your .env file.")
+        logger.error("   -> Get your bot token from https://discord.com/developers/applications")
         sys.exit(1)
     if not DISCORD_CHANNEL_ID:
-        print("[ERROR] DISCORD_CHANNEL_ID is not set in your .env file.")
-        print("   -> Right-click the channel in Discord -> 'Copy Channel ID'")
+        logger.error("DISCORD_CHANNEL_ID is not set in your .env file.")
+        logger.error("   -> Right-click the channel in Discord -> 'Copy Channel ID'")
         sys.exit(1)
 
-    print("=" * 60)
-    print("  Upwork Job Scraper -- Phase 2 (Discord Bot)")
-    print("=" * 60)
-    print()
+    logger.info("=" * 60)
+    logger.info("  Upwork Job Scraper -- Phase 2 (Discord Bot)")
+    logger.info("=" * 60)
+
+    # Register graceful shutdown signals if supported on OS
+    try:
+        signal.signal(signal.SIGINT, shutdown_handler)
+        signal.signal(signal.SIGTERM, shutdown_handler)
+    except NotImplementedError:
+        pass
 
     bot.run(DISCORD_TOKEN)

@@ -1,0 +1,15 @@
+{
+  "tracked_urls": [
+    {
+      "url": "https://www.upwork.com/nx/search/jobs/?q=python%20developer",
+      "channel_id": 1527584479592452116,
+      "label": "Python Jobs"
+    },
+    {
+      "url": "https://www.upwork.com/nx/search/jobs/?q=web%20scraping",
+      "channel_id": 1528384236632150126,
+      "label": "Scraping Jobs"
+    }
+  ],
+  "fetch_interval": 10
+}

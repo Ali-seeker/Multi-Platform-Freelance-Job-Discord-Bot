@@ -8,7 +8,11 @@ so you know exactly what to fix.
 
 import os
 import sys
+import json
 from dotenv import load_dotenv
+
+from logger import get_logger
+logger = get_logger(__name__)
 
 # Load .env file from the project root
 load_dotenv()
@@ -18,8 +22,8 @@ def _require_env(key: str) -> str:
     """Get an environment variable or exit with a helpful error."""
     value = os.getenv(key)
     if not value:
-        print(f"[ERROR] Missing required environment variable: {key}")
-        print(f"   -> Copy .env.example to .env and fill in your values.")
+        logger.error(f"Missing required environment variable: {key}")
+        logger.error("   -> Copy .env.example to .env and fill in your values.")
         sys.exit(1)
     return value
 
@@ -32,16 +36,25 @@ BEARER_TOKEN = _require_env("UPWORK_BEARER_TOKEN")
 COOKIES = _require_env("UPWORK_COOKIES")
 
 # --- Search ----------------------------------------------------------------
-SEARCH_QUERY = os.getenv("UPWORK_SEARCH_QUERY", "python developer")
 JOBS_PER_PAGE = int(os.getenv("UPWORK_JOBS_PER_PAGE", "10"))
+
+# Load config.json
+CONFIG_JSON_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+try:
+    with open(CONFIG_JSON_PATH, "r") as f:
+        _config_data = json.load(f)
+    TRACKED_URLS = _config_data.get("tracked_urls", [])
+    POLL_INTERVAL_SECONDS = _config_data.get("fetch_interval", int(os.getenv("POLL_INTERVAL_SECONDS", "10")))
+except Exception as e:
+    logger.error(f"Could not load config.json: {e}")
+    TRACKED_URLS = []
+    POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
 
 # --- Discord ---------------------------------------------------------------
 # Bot token from the Discord Developer Portal
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
-# Channel ID where job posts will be sent (right-click channel -> Copy ID)
+# Channel ID fallback
 DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID") or os.getenv("CHANNEL_ID", "")
-# How often the bot polls for new jobs (seconds)
-POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
 
 # --- Upwork API Details ----------------------------------------------------
 # These are constants derived from the captured request, not user secrets.

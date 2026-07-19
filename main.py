@@ -21,52 +21,64 @@ import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-from config import SEARCH_QUERY
+import urllib.parse
+from config import TRACKED_URLS
 from scraper import UpworkScraper
 from db import init_db, save_job, get_job_count
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def main():
-    print("=" * 60)
-    print("  Upwork Job Scraper -- Phase 1")
-    print("=" * 60)
-    print()
+    logger.info("=" * 60)
+    logger.info("  Upwork Job Scraper -- Phase 1")
+    logger.info("=" * 60)
 
     # Step 1: Initialize the database (creates jobs table if it doesn't exist)
     init_db()
     jobs_before = get_job_count()
-    print(f"[DB] Database initialized -- {jobs_before} existing jobs in database")
-    print()
+    logger.info(f"Database initialized -- {jobs_before} existing jobs in database")
 
     # Step 2: Create the scraper (loads auth from .env via config.py)
     scraper = UpworkScraper()
 
+    if not TRACKED_URLS:
+        logger.error("No tracked_urls found in config.json")
+        return
+
+    url_config = TRACKED_URLS[0]
+    url_source = url_config["url"]
+    label = url_config["label"]
+
+    parsed_url = urllib.parse.urlparse(url_source)
+    query_params = urllib.parse.parse_qs(parsed_url.query)
+    search_query = query_params.get('q', [''])[0] or label
+
     # Step 3: Fetch jobs
-    print(f'[SEARCH] Searching for: "{SEARCH_QUERY}"')
-    jobs = scraper.fetch_jobs(SEARCH_QUERY)
+    logger.info(f'Searching for: "{search_query}" (from {label})')
+    jobs = scraper.fetch_jobs(search_query)
 
     if not jobs:
-        print("\n[!] No jobs to process. Check the errors above.")
+        logger.warning("No jobs to process. Check the errors above.")
         return
 
     # Step 4: Save each job, tracking how many are new
     new_count = 0
     for job in jobs:
-        was_new = save_job(job)
+        was_new = save_job(job, url_source)
         if was_new:
             new_count += 1
-            print(f"  [NEW] {job['title'][:60]}")
-            print(f"        Budget: {job['budget']}  |  Skills: {job['skills'][:50]}")
+            logger.info(f"  [NEW] {job['title'][:60]}")
+            logger.info(f"        Budget: {job['budget']}  |  Skills: {job['skills'][:50]}")
         else:
-            print(f"  [SKIP] (already saved): {job['title'][:60]}")
+            logger.info(f"  [SKIP] (already saved): {job['title'][:60]}")
 
     # Step 5: Print summary
-    print()
-    print("-" * 60)
-    print(f"[SUMMARY] Fetched {len(jobs)} jobs, "
-          f"{new_count} were new and saved to database")
-    print(f"          Total jobs in database: {get_job_count()}")
-    print("-" * 60)
+    logger.info("-" * 60)
+    logger.info(f"Fetched {len(jobs)} jobs, {new_count} were new and saved to database")
+    logger.info(f"Total jobs in database: {get_job_count()}")
+    logger.info("-" * 60)
 
 
 if __name__ == "__main__":
