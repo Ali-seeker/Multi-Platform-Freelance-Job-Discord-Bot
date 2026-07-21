@@ -168,29 +168,7 @@ def format_job_message(job: dict, details: dict = None) -> tuple[str, discord.Em
     embed.add_field(name="Level", value=experience_level, inline=True)
     embed.add_field(name="Time", value=current_time, inline=True)
 
-    # Proposals and client info depend on details
-    if details:
-        # Extract total applicants (proposals)
-        client_activity = details.get('opening', {}).get('clientActivity', {})
-        proposals = client_activity.get('totalApplicants', 'Not specified')
-
-        # Extract client info
-        buyer = details.get('buyer', {})
-        buyer_stats = buyer.get('stats', {})
-        buyer_extra = details.get('buyerExtra', {})
-
-        client_country = buyer.get('location', {}).get('country', 'Unknown')
-        total_charges = buyer_stats.get('totalCharges', {}).get('amount', 0)
-        payment_verified = buyer_extra.get('isPaymentMethodVerified', False)
-        payment_status = "Verified" if payment_verified else "Not Verified"
-        
-        client_info = f"{client_country} / ${int(total_charges):,} / {payment_status}"
-    else:
-        proposals = "Loading..."
-        client_info = "Loading..."
-
-    embed.add_field(name="Proposals", value=str(proposals), inline=True)
-    embed.add_field(name="Client Info", value=client_info, inline=True)
+    # Proposals and Client Info removed due to Upwork API restrictions on unauthenticated requests.
 
     if skills:
         embed.add_field(name="Skills", value=skills, inline=False)
