@@ -15,13 +15,15 @@ def get_logger(name: str) -> logging.Logger:
 
     logger.setLevel(logging.INFO)
     
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s - %(message)s')
-    # wait, the prompt specified '%(asctime)s [%(levelname)s] %(message)s'
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    # Detailed formatter for file
+    file_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    
+    # Clean formatter for terminal
+    console_formatter = logging.Formatter('%(message)s')
 
     # Stream Handler (Terminal)
     stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
+    stream_handler.setFormatter(console_formatter)
     logger.addHandler(stream_handler)
 
     # File Handler (logs/bot.log)
@@ -31,7 +33,7 @@ def get_logger(name: str) -> logging.Logger:
     log_file = os.path.join(log_dir, 'bot.log')
     # Using RotatingFileHandler to prevent log file from growing infinitely
     file_handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
-    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(file_formatter)
     logger.addHandler(file_handler)
 
     return logger

@@ -92,11 +92,11 @@ class UpworkScraper:
             env_path = os.path.join(os.path.dirname(__file__), '.env')
             set_key(env_path, "UPWORK_BEARER_TOKEN", auth_header)
             set_key(env_path, "UPWORK_COOKIES", cookie_string)
-            logger.info("Credentials refreshed and saved to .env")
+            logger.info("💾 New credentials saved to .env")
         except Exception as e:
             logger.warning(f"Failed to save refreshed credentials to .env: {e}", exc_info=True)
         
-        logger.info("Session headers updated with fresh credentials")
+        logger.info("📡 Session headers updated")
 
     def fetch_jobs(self, search_query: str, count: int = JOBS_PER_PAGE) -> list[dict]:
         """

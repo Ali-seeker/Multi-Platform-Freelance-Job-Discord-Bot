@@ -99,7 +99,7 @@ def _wait_for_cloudflare(driver, timeout=180):
                         for el in els:
                             if el.is_displayed():
                                 ActionChains(driver).move_to_element(el).click().perform()
-                                logger.info(f"Clicked Cloudflare Turnstile element ({selector}).")
+                                logger.info("🛡️ Bypassed Cloudflare verification")
                                 clicked = True
                                 break
                         if clicked:
@@ -146,12 +146,12 @@ class AuthManager:
         """
         Refresh orchestrator.
         """
-        logger.info(f"[Auth] Session refresh triggered: {reason}")
+        logger.info(f"🔄 Session refresh triggered ({reason})")
 
         for attempt in range(1, 4):
             driver = None
             try:
-                logger.info(f"[Attempt {attempt}/3] Launching headless Selenium browser...")
+                logger.info(f"🌐 [Attempt {attempt}/3] Headless browser launched, fetching credentials...")
 
                 options = _build_options(self.user_agent)
                 driver = webdriver.Chrome(options=options)
@@ -164,18 +164,19 @@ class AuthManager:
 
                 driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": STEALTH_JS})
                 driver.set_window_size(1920, 1080)
-
-                logger.info("Navigating to Upwork homepage...")
+                
+                # Removing the verbose navigating and loaded logs:
+                # logger.info("Navigating to Upwork homepage...")
                 driver.get("https://www.upwork.com")
 
                 if not _wait_for_cloudflare(driver, timeout=180):
-                    logger.warning(f"Cloudflare did not resolve on attempt {attempt}. Retrying...")
+                    logger.warning(f"⚠️ Cloudflare failed (Attempt {attempt}). Retrying...")
                     driver.quit()
                     time.sleep(15)
                     continue
 
-                logger.info(f"Homepage loaded. URL: {driver.current_url}, Title: {driver.title}")
-                logger.info("Waiting for homepage JS to settle...")
+                # logger.info(f"Homepage loaded. URL: {driver.current_url}, Title: {driver.title}")
+                # logger.info("Waiting for homepage JS to settle...")
                 time.sleep(10)
 
                 raw_cookies = driver.get_cookies()
@@ -207,13 +208,13 @@ class AuthManager:
                     time.sleep(15)
                     continue
 
-                logger.info(f"[Auth] Extracted credentials - Token source: {token_source}, Cookies: {len(new_cookies)}")
+                logger.info(f"🔑 Auth token extracted (Source: {token_source})")
 
                 cookie_string = "; ".join(f"{c['name']}={c['value']}" for c in raw_cookies)
                 auth_header = f"Bearer {new_oauth_token}"
                 
                 self.session_timestamp = datetime.now()
-                logger.info("[OK] Refreshed via Headless Selenium")
+                logger.info("✅ Credentials refreshed successfully")
                 
                 driver.quit()
                 return auth_header, cookie_string
@@ -237,7 +238,7 @@ class AuthManager:
         Fetches the raw HTML for a specific job page using a headless browser to bypass
         Cloudflare's strict Turnstile on the HTML pages.
         """
-        logger.info(f"Fetching HTML for {ciphertext} using Headless Selenium...")
+        logger.info(f"🌐 Fetching HTML for {ciphertext} using Headless Selenium...")
         driver = None
         for attempt in range(1, 3):
             try:

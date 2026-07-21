@@ -32,11 +32,16 @@ def status():
 def start_dashboard():
     """Starts the Flask dashboard in a background thread."""
     def run():
-        # run on 0.0.0.0 to be accessible, port 5000, disable reloader and debug
-        # suppress werkzeug logging
         import logging
+        from flask import cli
+        
+        # Disable Flask startup banners
+        cli.show_server_banner = lambda *x: None
+        
+        # Suppress werkzeug logging
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
+        
         app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
 
     dashboard_thread = threading.Thread(target=run, daemon=True)

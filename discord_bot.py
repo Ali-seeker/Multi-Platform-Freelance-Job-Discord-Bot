@@ -35,7 +35,6 @@ from discord.ext import tasks
 import urllib.parse
 from config import (
     DISCORD_TOKEN,
-    DISCORD_CHANNEL_ID,
     TRACKED_URLS,
     POLL_INTERVAL_SECONDS,
     REQUEST_HEADERS,
@@ -45,6 +44,9 @@ from auth_manager import AuthManager, SessionExpiredError
 from db import init_db, save_job, job_exists, get_job_count, cleanup_old_jobs
 from monitor import global_state, start_dashboard
 from logger import get_logger
+
+import logging
+logging.getLogger("discord").setLevel(logging.WARNING)
 
 logger = get_logger(__name__)
 
@@ -188,7 +190,7 @@ def format_job_message(job: dict, details: dict = None) -> tuple[str, discord.Em
     embed.set_footer(text="Upwork Job Bot")
     embed.timestamp = discord.utils.utcnow()
 
-    content = f"**{title}**\nBudget: {budget} | Level: {experience_level}"
+    content = ""
 
     return content, embed
 
@@ -212,7 +214,7 @@ def format_thread_details(details: dict, job: dict) -> str:
     job_url = build_job_url(ciphertext) if ciphertext else ""
 
     # --- Full Job Description ---
-    description = details.get("description", "No description available.")
+    description = details.get("description") or job.get("description", "No description available.")
 
     # --- Client Details ---
     location = details.get("client_location", "Unknown")
@@ -236,10 +238,10 @@ def format_thread_details(details: dict, job: dict) -> str:
     payment = "Verified" if details.get("payment_verified") else "Not Verified"
 
     # --- Job Details ---
-    job_type = details.get("job_type", "Not specified")
-    budget = details.get("budget", "Not specified")
+    job_type = details.get("job_type") or job.get("job_type", "Not specified")
+    budget = details.get("budget") or job.get("budget", "Not specified")
     duration = details.get("project_duration", "Not specified")
-    level = details.get("experience_level", "Not specified")
+    level = details.get("experience_level") or job.get("level", "Not specified")
     category = details.get("category", "Not specified")
     applicants = details.get("total_applicants", 0)
     hired = details.get("total_hired", 0)
@@ -341,20 +343,16 @@ auth_manager = AuthManager(user_agent=REQUEST_HEADERS["user-agent"])
 @bot.event
 async def on_ready():
     """Called when the bot successfully connects to Discord."""
-    logger.info(f"Logged in as {bot.user}")
-    logger.info(f"Loaded {len(TRACKED_URLS)} tracked URLs from config.json")
-    logger.info(f"Polling every {POLL_INTERVAL_SECONDS} seconds")
-
     # Initialize the database
     init_db()
-    logger.info(f"Database ready -- {get_job_count()} existing jobs")
 
     # Start dashboard
     start_dashboard()
-    logger.info("Monitoring dashboard started on port 5000")
 
     # Update state
     global_state["active_urls"] = len(TRACKED_URLS)
+    
+    logger.info(f"🟢 Bot Online | 🤖 {bot.user} | 🔗 {len(TRACKED_URLS)} URLs | 🗄️ {get_job_count()} Jobs | 📊 Dash :5000 | ⏱️ Poll {POLL_INTERVAL_SECONDS}s")
 
     # Start the polling loops
     if not poll_upwork.is_running():
@@ -369,11 +367,11 @@ async def memory_monitor():
     mem_mb = psutil.Process().memory_info().rss / (1024 * 1024)
     global_state["memory_usage_mb"] = mem_mb
     if mem_mb > 400:
-        logger.warning(f"High memory usage detected: {mem_mb:.2f} MB")
+        logger.warning(f"⚠️ High memory usage: {mem_mb:.2f} MB")
 
 @tasks.loop(hours=24)
 async def db_cleanup_task():
-    logger.info("Running daily DB cleanup...")
+    logger.info("🧹 Running daily DB cleanup...")
     cleanup_old_jobs(14)
 
 
@@ -391,7 +389,7 @@ async def poll_upwork():
     
     # --- Proactive refresh (secondary safety net) ---
     if auth_manager.should_refresh():
-        logger.info("Proactive scheduled refresh -- session lifetime exceeded")
+        logger.info("🔄 Proactive session refresh (scheduled)")
         result = await asyncio.to_thread(auth_manager.refresh_session, reason="proactive scheduled refresh")
         if result:
             auth_header, cookie_string = result
@@ -409,7 +407,7 @@ async def poll_upwork():
             global_state["errors_last_hour"] += 1
             continue
 
-        logger.info(f"Checking '{label}' ({url_source})...")
+        logger.info(f"🔍 Scanning: {label}")
 
         # Extract search query from the URL (q parameter)
         parsed_url = urllib.parse.urlparse(url_source)
@@ -424,7 +422,7 @@ async def poll_upwork():
         try:
             jobs = await asyncio.to_thread(scraper.fetch_jobs, search_query)
         except SessionExpiredError:
-            logger.info(f"Reactive refresh triggered by 401/403 on fetch_jobs ({label})")
+            logger.info(f"🔄 Reactive session refresh (401/403 for {label})")
             result = await asyncio.to_thread(auth_manager.refresh_session, reason="reactive refresh triggered by 401/403")
             if result:
                 auth_header, cookie_string = result
@@ -433,11 +431,11 @@ async def poll_upwork():
                 try:
                     jobs = await asyncio.to_thread(scraper.fetch_jobs, search_query)  # Retry once with fresh session
                 except SessionExpiredError:
-                    logger.warning(f"Retry after refresh still got 401/403 -- skipping {label}")
+                    logger.warning(f"⚠️ Retry failed (401/403) -- skipping {label}")
                     global_state["errors_last_hour"] += 1
                     continue
             else:
-                logger.error(f"Reactive refresh failed -- skipping {label}")
+                logger.error(f"❌ Refresh failed -- skipping {label}")
                 global_state["errors_last_hour"] += 1
                 continue
 
@@ -462,7 +460,7 @@ async def poll_upwork():
                 new_count += 1
                 total_new_count += 1
                 global_state["jobs_posted_last_hour"] += 1
-                logger.info(f"  [NEW] {title[:60]}")
+                logger.info(f"✨ [NEW] {title[:60]}")
 
                 # Fetch full details for this job
                 ciphertext = job.get("ciphertext", "")
@@ -471,7 +469,7 @@ async def poll_upwork():
                     try:
                         details = await asyncio.to_thread(scraper.fetch_job_details, ciphertext)
                     except SessionExpiredError:
-                        logger.info("Reactive refresh triggered by 401/403 on job details")
+                        logger.info("🔄 Reactive session refresh (401/403 on details)")
                         result = await asyncio.to_thread(auth_manager.refresh_session, reason="reactive refresh triggered by 401/403")
                         if result:
                             auth_header, cookie_string = result
@@ -480,7 +478,7 @@ async def poll_upwork():
                             try:
                                 details = await asyncio.to_thread(scraper.fetch_job_details, ciphertext)  # Retry once
                             except SessionExpiredError:
-                                logger.warning("Retry after refresh still failed for job details")
+                                logger.warning("⚠️ Retry failed for job details")
 
                 # Format and send the main message
                 content_text, embed = format_job_message(job, details)
@@ -511,19 +509,18 @@ async def poll_upwork():
                         global_state["errors_last_hour"] += 1
                         continue
 
-                    if details:
-                        try:
-                            thread = await send_with_retry(
-                                sent_message.create_thread,
-                                name=thread_name,
-                                auto_archive_duration=60,
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to create thread: {e}")
-                            global_state["errors_last_hour"] += 1
+                    try:
+                        thread = await send_with_retry(
+                            sent_message.create_thread,
+                            name=thread_name,
+                            auto_archive_duration=60,
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to create thread: {e}")
+                        global_state["errors_last_hour"] += 1
 
                 # Post the thread details
-                if thread and details:
+                if thread:
                     thread_text = format_thread_details(details, job)
                     # Split into multiple messages if over Discord's 2000 char limit
                     if len(thread_text) > 2000:
@@ -537,13 +534,14 @@ async def poll_upwork():
                 global_state["errors_last_hour"] += 1
                 continue
         
-        logger.info(f"Summary for '{label}': Found {new_count} new jobs.")
+        if new_count > 0:
+            logger.info(f"✅ {label}: Found {new_count} new jobs.")
         
         # Pause briefly before checking the next URL to avoid slamming the API
         await asyncio.sleep(2)
 
     if total_new_count > 0:
-        logger.info(f"Completed poll cycle. Posted {total_new_count} new jobs to Discord. Total in DB: {get_job_count()}")
+        logger.info(f"📫 Cycle Complete: {total_new_count} posted | Total DB: {get_job_count()}")
 
     # Refresh memory stats
     global_state["memory_usage_mb"] = psutil.Process().memory_info().rss / (1024 * 1024)
@@ -612,14 +610,8 @@ if __name__ == "__main__":
         logger.error("DISCORD_TOKEN is not set in your .env file.")
         logger.error("   -> Get your bot token from https://discord.com/developers/applications")
         sys.exit(1)
-    if not DISCORD_CHANNEL_ID:
-        logger.error("DISCORD_CHANNEL_ID is not set in your .env file.")
-        logger.error("   -> Right-click the channel in Discord -> 'Copy Channel ID'")
-        sys.exit(1)
 
-    logger.info("=" * 60)
-    logger.info("  Upwork Job Scraper -- Phase 2 (Discord Bot)")
-    logger.info("=" * 60)
+    logger.info("🚀 Starting Upwork Discord Bot...")
 
     # Register graceful shutdown signals if supported on OS
     try:
@@ -628,4 +620,4 @@ if __name__ == "__main__":
     except NotImplementedError:
         pass
 
-    bot.run(DISCORD_TOKEN)
+    bot.run(DISCORD_TOKEN, log_handler=None)
