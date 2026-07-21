@@ -15,7 +15,7 @@ These are deliberately kept separate:
 import re
 import os
 import time
-import requests
+from curl_cffi import requests
 from dotenv import set_key
 from config import (
     GRAPHQL_URL,
@@ -42,7 +42,7 @@ class UpworkScraper:
     """
 
     def __init__(self):
-        self.session = requests.Session()
+        self.session = requests.Session(impersonate="chrome124")
         # Apply all headers from config to the session
         self.session.headers.update(REQUEST_HEADERS)
         # Set cookies from the raw cookie string in .env
@@ -64,6 +64,8 @@ class UpworkScraper:
             cookie_string: Fresh full cookie header string
         """
         self.session.headers["authorization"] = auth_header
+        if auth_header.startswith("Bearer "):
+            self.session.headers["x-oauth2-global-js-token"] = auth_header[7:]
         self.session.headers["cookie"] = cookie_string
         # Re-extract XSRF token for CSRF protection header
         xsrf = ""
@@ -74,6 +76,7 @@ class UpworkScraper:
                 break
         if xsrf:
             self.session.headers["x-odesk-csrf-token"] = xsrf
+            self.session.headers["x-xsrf-token"] = xsrf
         # Re-extract visitor_id
         visitor_id = ""
         for part in cookie_string.split(";"):
@@ -257,7 +260,10 @@ class UpworkScraper:
         try:
             details = data["data"]["jobPubDetails"]
         except (KeyError, TypeError) as e:
-            logger.error(f"Unexpected job details structure: {e}", exc_info=True)
+            if "errors" in data:
+                logger.warning("Visitor token lacks permission for full job details (this is normal for unauthenticated headless automation). Returning partial info.")
+            else:
+                logger.error(f"Unexpected job details structure: {e}", exc_info=True)
             return {}
 
         return _parse_job_details(details)

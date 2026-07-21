@@ -81,28 +81,21 @@ _visitor_id = _extract_cookie_value(COOKIES, "visitor_id")
 # Headers that mimic a real browser request.
 # The cookie and authorization values are injected from .env at runtime.
 REQUEST_HEADERS = {
-    "accept": "*/*",
+    "accept": "application/json, text/plain, */*",
     "accept-encoding": "gzip, deflate",
     "accept-language": "en-US,en;q=0.9",
     "authorization": BEARER_TOKEN,
     "content-type": "application/json",
     "origin": "https://www.upwork.com",
     "referer": "https://www.upwork.com/nx/search/jobs/",
-    "sec-ch-ua": '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"Windows"',
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-origin",
     "user-agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/150.0.0.0 Safari/537.36"
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     ),
+    "x-requested-with": "XMLHttpRequest",
     "x-upwork-accept-language": "en-US",
-    # CSRF protection — must match the XSRF-TOKEN cookie value
     "x-odesk-csrf-token": _xsrf_token,
-    # Visitor tracking headers from the original request
+    "x-xsrf-token": _xsrf_token,
     "vnd-eo-visitorid": _visitor_id,
 }
 

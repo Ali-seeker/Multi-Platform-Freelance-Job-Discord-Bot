@@ -9,6 +9,11 @@
       "url": "https://www.upwork.com/nx/search/jobs/?q=web%20scraping",
       "channel_id": 1528384236632150126,
       "label": "Scraping Jobs"
+    },
+    {
+      "url": "https://www.upwork.com/nx/search/jobs/?q=react%20developer",
+      "channel_id": 1528639035415724052,
+      "label": "React Developer"
     }
   ],
   "fetch_interval": 10

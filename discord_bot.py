@@ -16,6 +16,7 @@ Requires DISCORD_TOKEN and DISCORD_CHANNEL_ID in your .env file.
 
 import sys
 import io
+import os
 import asyncio
 import psutil
 import signal
@@ -187,8 +188,7 @@ def format_job_message(job: dict, details: dict = None) -> tuple[str, discord.Em
     embed.set_footer(text="Upwork Job Bot")
     embed.timestamp = discord.utils.utcnow()
 
-    # Compact one-line content for forum list view preview
-    content = f"Posted: {relative} | {budget} | {experience_level} | {proposals} proposals"
+    content = f"**{title}**\nBudget: {budget} | Level: {experience_level}"
 
     return content, embed
 
@@ -392,7 +392,7 @@ async def poll_upwork():
     # --- Proactive refresh (secondary safety net) ---
     if auth_manager.should_refresh():
         logger.info("Proactive scheduled refresh -- session lifetime exceeded")
-        result = auth_manager.refresh_session(reason="proactive scheduled refresh")
+        result = await asyncio.to_thread(auth_manager.refresh_session, reason="proactive scheduled refresh")
         if result:
             auth_header, cookie_string = result
             scraper.update_session(auth_header, cookie_string)
@@ -422,16 +422,16 @@ async def poll_upwork():
 
         # --- Fetch jobs with reactive refresh on 401/403 ---
         try:
-            jobs = scraper.fetch_jobs(search_query)
+            jobs = await asyncio.to_thread(scraper.fetch_jobs, search_query)
         except SessionExpiredError:
             logger.info(f"Reactive refresh triggered by 401/403 on fetch_jobs ({label})")
-            result = auth_manager.refresh_session(reason="reactive refresh triggered by 401/403")
+            result = await asyncio.to_thread(auth_manager.refresh_session, reason="reactive refresh triggered by 401/403")
             if result:
                 auth_header, cookie_string = result
                 scraper.update_session(auth_header, cookie_string)
                 global_state["last_token_refresh"] = datetime.now().isoformat()
                 try:
-                    jobs = scraper.fetch_jobs(search_query)  # Retry once with fresh session
+                    jobs = await asyncio.to_thread(scraper.fetch_jobs, search_query)  # Retry once with fresh session
                 except SessionExpiredError:
                     logger.warning(f"Retry after refresh still got 401/403 -- skipping {label}")
                     global_state["errors_last_hour"] += 1
@@ -469,16 +469,16 @@ async def poll_upwork():
                 details = {}
                 if ciphertext:
                     try:
-                        details = scraper.fetch_job_details(ciphertext)
+                        details = await asyncio.to_thread(scraper.fetch_job_details, ciphertext)
                     except SessionExpiredError:
                         logger.info("Reactive refresh triggered by 401/403 on job details")
-                        result = auth_manager.refresh_session(reason="reactive refresh triggered by 401/403")
+                        result = await asyncio.to_thread(auth_manager.refresh_session, reason="reactive refresh triggered by 401/403")
                         if result:
                             auth_header, cookie_string = result
                             scraper.update_session(auth_header, cookie_string)
                             global_state["last_token_refresh"] = datetime.now().isoformat()
                             try:
-                                details = scraper.fetch_job_details(ciphertext)  # Retry once
+                                details = await asyncio.to_thread(scraper.fetch_job_details, ciphertext)  # Retry once
                             except SessionExpiredError:
                                 logger.warning("Retry after refresh still failed for job details")
 
@@ -585,13 +585,25 @@ async def before_poll():
 # Entry Point
 # ---------------------------------------------------------------------------
 
+_shutdown_count = 0
+
 def shutdown_handler(signum, frame):
-    """Handle graceful shutdown for signals."""
-    logger.info("Received shutdown signal. Closing gracefully...")
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        loop.create_task(bot.close())
-    else:
+    """Handle graceful shutdown for signals, with force-quit on double press."""
+    global _shutdown_count
+    _shutdown_count += 1
+    
+    if _shutdown_count >= 2:
+        logger.warning("Second shutdown signal received. Forcing immediate exit...")
+        os._exit(1)
+        
+    logger.info("Received shutdown signal. Closing gracefully... (Press Ctrl+C again to force quit)")
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(bot.close())
+        else:
+            sys.exit(0)
+    except Exception:
         sys.exit(0)
 
 
