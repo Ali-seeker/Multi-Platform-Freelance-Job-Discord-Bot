@@ -78,32 +78,29 @@ def _wait_for_cloudflare(driver, timeout=180):
     deadline = time.time() + timeout
     clicked = False
     while time.time() < deadline:
-        title = driver.title or ""
-        if "just a moment" not in title.lower():
-            return True
+        # Use relative XPath to detect Cloudflare challenge presence instead of relying on page title
+        cf_indicators = driver.find_elements(By.XPATH, "//iframe[contains(@src, 'challenges.cloudflare.com') or contains(@title, 'challenge')] | //div[@id='challenge-stage' or contains(@class, 'cf-turnstile')]")
+        
+        if not cf_indicators:
+            # If no Cloudflare indicators are found and body exists, we assume it's bypassed/safe
+            if driver.find_elements(By.XPATH, "//body"):
+                return True
+
         try:
-            iframes = driver.find_elements(By.CSS_SELECTOR,
-                "iframe[src*='challenges.cloudflare.com'], iframe[title*='challenge']")
+            iframes = driver.find_elements(By.XPATH, "//iframe[contains(@src, 'challenges.cloudflare.com') or contains(@title, 'challenge')]")
             for iframe in iframes:
                 driver.switch_to.frame(iframe)
                 try:
-                    for selector in [
-                        "label.ctp-checkbox-label",
-                        "input[type='checkbox']",
-                        ".cb-lb",
-                        "#challenge-stage",
-                        ".mark",
-                        "body"
-                    ]:
-                        els = driver.find_elements(By.CSS_SELECTOR, selector)
-                        for el in els:
-                            if el.is_displayed():
-                                ActionChains(driver).move_to_element(el).click().perform()
-                                logger.info("🛡️ Bypassed Cloudflare verification")
-                                clicked = True
-                                break
-                        if clicked:
+                    # Locate click targets inside the iframe using XPath (including robust text-based XPath)
+                    targets = driver.find_elements(By.XPATH, "//label[.//span[normalize-space()='Verify you are human']] | //label[contains(@class, 'ctp-checkbox-label')] | //input[@type='checkbox'] | //*[contains(@class, 'cb-lb')] | //*[@id='challenge-stage'] | //*[contains(@class, 'mark')] | //body")
+                    for el in targets:
+                        if el.is_displayed():
+                            ActionChains(driver).move_to_element(el).click().perform()
+                            logger.info("🛡️ Bypassed Cloudflare verification")
+                            clicked = True
                             break
+                    if clicked:
+                        break
                 except Exception:
                     pass
                 finally:

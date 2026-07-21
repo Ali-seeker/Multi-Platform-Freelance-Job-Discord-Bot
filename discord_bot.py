@@ -170,18 +170,27 @@ def format_job_message(job: dict, details: dict = None) -> tuple[str, discord.Em
 
     # Proposals and client info depend on details
     if details:
-        proposals = str(details.get("total_applicants", 0))
-        payment = "Verified" if details.get("payment_verified") else "Not Verified"
-        location = details.get("client_location", "Unknown")
-        total_spent = details.get("client_total_spent", 0)
-        spent_str = f"${total_spent:,.2f}" if total_spent else "$0"
-        client_info = f"Payment {payment} | {location} | {spent_str} spent"
+        # Extract total applicants (proposals)
+        client_activity = details.get('opening', {}).get('clientActivity', {})
+        proposals = client_activity.get('totalApplicants', 'Not specified')
+
+        # Extract client info
+        buyer = details.get('buyer', {})
+        buyer_stats = buyer.get('stats', {})
+        buyer_extra = details.get('buyerExtra', {})
+
+        client_country = buyer.get('location', {}).get('country', 'Unknown')
+        total_charges = buyer_stats.get('totalCharges', {}).get('amount', 0)
+        payment_verified = buyer_extra.get('isPaymentMethodVerified', False)
+        payment_status = "Verified" if payment_verified else "Not Verified"
+        
+        client_info = f"{client_country} / ${int(total_charges):,} / {payment_status}"
     else:
         proposals = "Loading..."
         client_info = "Loading..."
 
-    embed.add_field(name="Proposals", value=proposals, inline=True)
-    embed.add_field(name="Client Info", value=client_info, inline=False)
+    embed.add_field(name="Proposals", value=str(proposals), inline=True)
+    embed.add_field(name="Client Info", value=client_info, inline=True)
 
     if skills:
         embed.add_field(name="Skills", value=skills, inline=False)
@@ -241,7 +250,7 @@ def format_thread_details(details: dict, job: dict) -> str:
     job_type = details.get("job_type") or job.get("job_type", "Not specified")
     budget = details.get("budget") or job.get("budget", "Not specified")
     duration = details.get("project_duration", "Not specified")
-    level = details.get("experience_level") or job.get("level", "Not specified")
+    level = details.get("experience_level") or job.get("experience_level", "Not specified")
     category = details.get("category", "Not specified")
     applicants = details.get("total_applicants", 0)
     hired = details.get("total_hired", 0)

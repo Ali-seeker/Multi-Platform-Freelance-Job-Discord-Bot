@@ -161,219 +161,40 @@ GRAPHQL_QUERY = """
 # ID. It returns the complete description, client info, proposal count, etc.
 # Captured from DevTools: /api/graphql/v1?alias=gql-query-get-visitor-job-details
 JOB_DETAILS_QUERY = """
-  fragment JobPubOpeningInfoFragment on Job {
-    ciphertext
-    id
-    type
-    access
-    title
-    hideBudget
-    createdOn
-    notSureProjectDuration
-    notSureFreelancersToHire
-    notSureExperienceLevel
-    notSureLocationPreference
-    premium
-  }
-  fragment JobPubOpeningSegmentationDataFragment on JobSegmentation {
-    customValue
-    label
-    name
-    sortOrder
-    type
-    value
-    skill {
+query JobPubDetailsQuery($id: ID!) {
+  jobPubDetails(id: $id) {
+    opening {
       description
-      externalLink
-      prettyName
-      skill
-      id
+      contractorTier
+      workload
+      clientActivity {
+        totalApplicants
+      }
+      engagementDuration {
+        label
+      }
+      annotations {
+        customFields
+      }
+    }
+    buyer {
+      company {
+        contractDate
+      }
+      location {
+        country
+      }
+      stats {
+        totalAssignments
+        totalJobsWithHires
+        totalCharges {
+          amount
+        }
+      }
+    }
+    buyerExtra {
+      isPaymentMethodVerified
     }
   }
-  fragment JobPubOpeningSandDataFragment on SandsData {
-    occupation {
-      freeText
-      ontologyId
-      prefLabel
-      id
-      uid: id
-    }
-    ontologySkills {
-      groupId
-      id
-      freeText
-      prefLabel
-      groupPrefLabel
-      relevance
-    }
-    additionalSkills {
-      groupId
-      id
-      freeText
-      prefLabel
-      relevance
-    }
-  }
-  fragment JobPubOpeningFragment on JobPubOpeningInfo {
-    status
-    postedOn
-    publishTime
-    sourcingTime
-    startDate
-    deliveryDate
-    workload
-    contractorTier
-    description
-    info {
-      ...JobPubOpeningInfoFragment
-    }
-    segmentationData {
-      ...JobPubOpeningSegmentationDataFragment
-    }
-    sandsData {
-      ...JobPubOpeningSandDataFragment
-    }
-    category {
-      name
-      urlSlug
-    }
-    categoryGroup {
-      name
-      urlSlug
-    }
-    budget {
-      amount
-      currencyCode
-    }
-    annotations {
-      customFields
-      tags
-    }
-    engagementDuration {
-      label
-      weeks
-    }
-    extendedBudgetInfo {
-      hourlyBudgetMin
-      hourlyBudgetMax
-      hourlyBudgetType
-    }
-    clientActivity {
-      lastBuyerActivity
-      totalApplicants
-      totalHired
-      totalInvitedToInterview
-      unansweredInvites
-      invitationsSent
-      numberOfPositionsToHire
-    }
-    deliverables
-    deadline
-    tools {
-      name
-    }
-  }
-  fragment JobPubBuyerInfoFragment on JobPubBuyerInfo {
-    location {
-      offsetFromUtcMillis
-      countryTimezone
-      city
-      country
-    }
-    stats {
-      totalAssignments
-      activeAssignmentsCount
-      hoursCount
-      feedbackCount
-      score
-      totalJobsWithHires
-      totalCharges {
-        amount
-      }
-    }
-    company {
-      name @include(if: $isLoggedIn)
-      companyId @include(if: $isLoggedIn)
-      isEDCReplicated
-      contractDate
-      profile {
-        industry
-        size
-      }
-    }
-    jobs {
-      openCount @include(if: $isLoggedIn)
-      postedCount @include(if: $isLoggedIn)
-      openJobs @include(if: $isLoggedIn) {
-        id
-        uid: id
-        isPtcPrivate
-        ciphertext
-        title
-        type
-      }
-    }
-    avgHourlyJobsRate @include(if: $isLoggedIn) {
-      amount
-    }
-  }
-  fragment JobQualificationsFragment on JobQualifications {
-    countries
-    earnings
-    groupRecno
-    languages
-    localDescription
-    localFlexibilityDescription
-    localMarket
-    minJobSuccessScore
-    minOdeskHours
-    onSiteType
-    prefEnglishSkill
-    regions
-    risingTalent
-    shouldHavePortfolio
-    states
-    tests
-    timezones
-    type
-    locationCheckRequired
-    group {
-      groupId
-      groupLogo
-      groupName
-    }
-    location {
-      city
-      country
-      countryTimezone
-      offsetFromUtcMillis
-      state
-      worldRegion
-    }
-    locations {
-      id
-      type
-    }
-    minHoursWeek @skip(if: $isLoggedIn)
-    readyToStartToday {
-      expiresAt
-    }
-  }
-  query JobPubDetailsQuery($id: ID!, $isLoggedIn: Boolean!) {
-    jobPubDetails(id: $id) {
-      opening {
-        ...JobPubOpeningFragment
-      }
-      qualifications {
-        ...JobQualificationsFragment
-      }
-      buyer {
-        ...JobPubBuyerInfoFragment
-      }
-      buyerExtra {
-        isPaymentMethodVerified
-      }
-    }
-  }
+}
 """
-

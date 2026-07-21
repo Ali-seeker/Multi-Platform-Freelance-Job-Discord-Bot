@@ -220,7 +220,6 @@ class UpworkScraper:
             "query": JOB_DETAILS_QUERY,
             "variables": {
                 "id": ciphertext,
-                "isLoggedIn": False,
             },
         }
 

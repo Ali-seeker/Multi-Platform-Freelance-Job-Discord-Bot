@@ -4,6 +4,7 @@ from flask import Flask, jsonify
 
 app = Flask(__name__)
 
+#http://localhost:5000/status
 # Global state to share with the main bot
 global_state = {
     "start_time": time.time(),
