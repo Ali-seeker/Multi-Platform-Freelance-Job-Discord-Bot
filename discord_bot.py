@@ -33,6 +33,7 @@ from discord.ext import tasks
 from discord import app_commands
 
 import urllib.parse
+import hashlib
 from config import (
     DISCORD_TOKEN,
     TRACKED_URLS,
@@ -44,7 +45,7 @@ from config import (
 )
 from scraper import UpworkScraper
 from auth_manager import AuthManager, SessionExpiredError
-from db import init_db, save_job, job_exists, get_job_count, cleanup_old_jobs
+from db import init_db, save_job, job_exists, get_job_count, cleanup_old_jobs, get_job_hash
 from monitor import global_state, start_dashboard
 from logger import get_logger
 
@@ -111,7 +112,7 @@ def build_job_url(ciphertext: str) -> str:
     return f"https://www.upwork.com/jobs/{ciphertext}"
 
 
-def format_job_message(job: dict, details: dict = None) -> tuple[str, discord.Embed]:
+def format_job_message(job: dict, details: dict = None, is_updated: bool = False) -> tuple[str, discord.Embed]:
     """
     Build a formatted Discord message for a new Upwork job posting.
 
@@ -180,7 +181,7 @@ def format_job_message(job: dict, details: dict = None) -> tuple[str, discord.Em
     embed.set_footer(text="Upwork Job Bot")
     embed.timestamp = discord.utils.utcnow()
 
-    content = ""
+    content = "🔄 **[UPDATED]** This job has been updated by the client!" if is_updated else ""
 
     return content, embed
 
@@ -468,12 +469,13 @@ async def on_ready():
     # Initialize the database
     init_db()
     
-    # Sync commands to Discord
-    try:
-        synced = await tree.sync()
-        logger.info(f"Synced {len(synced)} command(s).")
-    except Exception as e:
-        logger.error(f"Failed to sync commands: {e}")
+    # Commands sync karne ka code comment kar diya hai.
+    # Ab commands already Discord pe save hain, to baar baar sync nahi karna paray ga.
+    # try:
+    #     synced = await tree.sync()
+    #     logger.info(f"Synced {len(synced)} command(s).")
+    # except Exception as e:
+    #     logger.error(f"Failed to sync commands: {e}")
 
     # Start dashboard
     start_dashboard()
@@ -532,9 +534,12 @@ async def poll_upwork():
 
         channel = bot.get_channel(int(channel_id))
         if not channel:
-            logger.error(f"Could not find channel {channel_id} for {label}")
-            global_state["errors_last_hour"] += 1
-            continue
+            try:
+                channel = await bot.fetch_channel(int(channel_id))
+            except Exception as e:
+                logger.error(f"Could not find channel {channel_id} for {label}: {e}")
+                global_state["errors_last_hour"] += 1
+                continue
 
         logger.info(f"🔍 Scanning: {label}")
 
@@ -580,19 +585,32 @@ async def poll_upwork():
             title = job.get("title", "Untitled")
 
             try:
-                # Skip if we've already seen this job FOR THIS URL SOURCE
-                if job_exists(job_id, url_source):
+                description = job.get("description", "")
+                budget = job.get("budget", "")
+                
+                # Compute current hash
+                hash_input = f"{title}|{description}|{budget}".encode('utf-8')
+                current_hash = hashlib.sha256(hash_input).hexdigest()
+
+                stored_hash = get_job_hash(job_id, url_source)
+                
+                if stored_hash == current_hash:
+                    # Skip if we've already seen this job and it hasn't changed
                     continue
 
+                is_updated = (stored_hash is not None)
+
                 # Save to database FIRST
-                was_saved = save_job(job, url_source)
-                if not was_saved:
-                    continue
+                save_job(job, url_source, current_hash)
 
                 new_count += 1
                 total_new_count += 1
                 global_state["jobs_posted_last_hour"] += 1
-                logger.info(f"✨ [NEW] {title[:60]}")
+                
+                if is_updated:
+                    logger.info(f"🔄 [UPDATED] {title[:60]}")
+                else:
+                    logger.info(f"✨ [NEW] {title[:60]}")
 
                 # Fetch full details for this job
                 ciphertext = job.get("ciphertext", "")
@@ -613,7 +631,7 @@ async def poll_upwork():
                                 logger.warning("⚠️ Retry failed for job details")
 
                 # Format and send the main message
-                content_text, embed = format_job_message(job, details)
+                content_text, embed = format_job_message(job, details, is_updated=is_updated)
                 thread_name = f"Job: {title[:80]}"
                 thread = None
 

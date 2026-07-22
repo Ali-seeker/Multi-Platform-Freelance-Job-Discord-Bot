@@ -69,6 +69,7 @@ def init_db() -> None:
                 skills      TEXT,                -- Comma-separated skill names
                 posted_time TEXT,                -- When the job was posted on Upwork (ISO 8601)
                 fetched_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- When we scraped it
+                content_hash TEXT DEFAULT '',    -- Hash of the job content to detect updates
                 PRIMARY KEY (job_id, url_source)
             )
         """)
@@ -81,23 +82,29 @@ def init_db() -> None:
             """)
             conn.execute("DROP TABLE jobs_old")
             logger.info("Migration complete.")
+        elif columns and 'content_hash' not in columns:
+            logger.info("Migrating database to add content_hash column...")
+            try:
+                conn.execute("ALTER TABLE jobs ADD COLUMN content_hash TEXT DEFAULT ''")
+                logger.info("Migration to add content_hash complete.")
+            except Exception as e:
+                logger.error(f"Migration error for content_hash: {e}")
 
         conn.commit()
     finally:
         conn.close()
 
 
-def save_job(job_dict: dict, url_source: str) -> bool:
+def save_job(job_dict: dict, url_source: str, content_hash: str = "") -> bool:
     """
-    Insert a job into the database. Returns True if the job was newly inserted,
-    False if it already existed (was skipped) for this specific URL source.
+    Insert or replace a job into the database. Returns True.
     """
     conn = _get_connection()
     try:
         cursor = conn.execute(
             """
-            INSERT OR IGNORE INTO jobs (job_id, url_source, title, description, budget, skills, posted_time, fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO jobs (job_id, url_source, title, description, budget, skills, posted_time, fetched_at, content_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 job_dict["job_id"],
@@ -108,11 +115,11 @@ def save_job(job_dict: dict, url_source: str) -> bool:
                 job_dict.get("skills", ""),
                 job_dict.get("posted_time", ""),
                 datetime.now(timezone.utc).isoformat(),
+                content_hash,
             ),
         )
         conn.commit()
-        # rowcount is 1 if a new row was inserted, 0 if it was ignored (duplicate)
-        return cursor.rowcount == 1
+        return True
     finally:
         conn.close()
 
@@ -127,6 +134,23 @@ def job_exists(job_id: str, url_source: str) -> bool:
             "SELECT 1 FROM jobs WHERE job_id = ? AND url_source = ?", (job_id, url_source)
         ).fetchone()
         return row is not None
+    finally:
+        conn.close()
+
+
+def get_job_hash(job_id: str, url_source: str):
+    """
+    Returns the content_hash of the job if it exists, otherwise None.
+    If the job exists but has no hash (legacy data), returns an empty string.
+    """
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT content_hash FROM jobs WHERE job_id = ? AND url_source = ?", (job_id, url_source)
+        ).fetchone()
+        if row:
+            return row["content_hash"] if row["content_hash"] is not None else ""
+        return None
     finally:
         conn.close()
 
