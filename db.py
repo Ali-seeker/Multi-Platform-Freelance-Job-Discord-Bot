@@ -53,9 +53,9 @@ def init_db() -> None:
     conn = _get_connection()
     try:
         cursor = conn.execute("PRAGMA table_info(jobs)")
-        columns = [row['name'] for row in cursor.fetchall()]
+        columns = [row["name"] for row in cursor.fetchall()]
 
-        if columns and 'url_source' not in columns:
+        if columns and "url_source" not in columns:
             logger.info("Migrating database to new schema (adding url_source)...")
             conn.execute("ALTER TABLE jobs RENAME TO jobs_old")
 
@@ -74,7 +74,7 @@ def init_db() -> None:
             )
         """)
 
-        if columns and 'url_source' not in columns:
+        if columns and "url_source" not in columns:
             conn.execute("""
                 INSERT INTO jobs (job_id, url_source, title, description, budget, skills, posted_time, fetched_at)
                 SELECT job_id, 'legacy', title, description, budget, skills, posted_time, fetched_at
@@ -82,7 +82,7 @@ def init_db() -> None:
             """)
             conn.execute("DROP TABLE jobs_old")
             logger.info("Migration complete.")
-        elif columns and 'content_hash' not in columns:
+        elif columns and "content_hash" not in columns:
             logger.info("Migrating database to add content_hash column...")
             try:
                 conn.execute("ALTER TABLE jobs ADD COLUMN content_hash TEXT DEFAULT ''")
@@ -131,7 +131,8 @@ def job_exists(job_id: str, url_source: str) -> bool:
     conn = _get_connection()
     try:
         row = conn.execute(
-            "SELECT 1 FROM jobs WHERE job_id = ? AND url_source = ?", (job_id, url_source)
+            "SELECT 1 FROM jobs WHERE job_id = ? AND url_source = ?",
+            (job_id, url_source),
         ).fetchone()
         return row is not None
     finally:
@@ -146,7 +147,8 @@ def get_job_hash(job_id: str, url_source: str):
     conn = _get_connection()
     try:
         row = conn.execute(
-            "SELECT content_hash FROM jobs WHERE job_id = ? AND url_source = ?", (job_id, url_source)
+            "SELECT content_hash FROM jobs WHERE job_id = ? AND url_source = ?",
+            (job_id, url_source),
         ).fetchone()
         if row:
             return row["content_hash"] if row["content_hash"] is not None else ""
@@ -163,6 +165,7 @@ def get_job_count() -> int:
         return row["cnt"]
     finally:
         conn.close()
+
 
 def cleanup_old_jobs(days: int = 14) -> int:
     """

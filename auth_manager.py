@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 
 from logger import get_logger
+
 logger = get_logger(__name__)
 
 from selenium import webdriver
@@ -22,13 +23,16 @@ from selenium.webdriver.common.keys import Keys
 # Custom Exception
 # ---------------------------------------------------------------------------
 
+
 class SessionExpiredError(Exception):
     """
     Raised when a 401 or 403 response is received from Upwork's API,
     signaling that the session (Bearer token or Cloudflare cookies)
     has expired and needs to be refreshed.
     """
+
     pass
+
 
 # ---------------------------------------------------------------------------
 # Stealth Configuration
@@ -55,6 +59,7 @@ UA_STRING = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
+
 def _build_options(user_agent: str):
     opts = Options()
     opts.add_argument("--headless=new")
@@ -74,25 +79,35 @@ def _build_options(user_agent: str):
     opts.add_argument("--disable-extensions")
     return opts
 
+
 def _wait_for_cloudflare(driver, timeout=180):
     deadline = time.time() + timeout
     clicked = False
     while time.time() < deadline:
         # Use relative XPath to detect Cloudflare challenge presence instead of relying on page title
-        cf_indicators = driver.find_elements(By.XPATH, "//iframe[contains(@src, 'challenges.cloudflare.com') or contains(@title, 'challenge')] | //div[@id='challenge-stage' or contains(@class, 'cf-turnstile')]")
-        
+        cf_indicators = driver.find_elements(
+            By.XPATH,
+            "//iframe[contains(@src, 'challenges.cloudflare.com') or contains(@title, 'challenge')] | //div[@id='challenge-stage' or contains(@class, 'cf-turnstile')]",
+        )
+
         if not cf_indicators:
             # If no Cloudflare indicators are found and body exists, we assume it's bypassed/safe
             if driver.find_elements(By.XPATH, "//body"):
                 return True
 
         try:
-            iframes = driver.find_elements(By.XPATH, "//iframe[contains(@src, 'challenges.cloudflare.com') or contains(@title, 'challenge')]")
+            iframes = driver.find_elements(
+                By.XPATH,
+                "//iframe[contains(@src, 'challenges.cloudflare.com') or contains(@title, 'challenge')]",
+            )
             for iframe in iframes:
                 driver.switch_to.frame(iframe)
                 try:
                     # Locate click targets inside the iframe using XPath (including robust text-based XPath)
-                    targets = driver.find_elements(By.XPATH, "//label[.//span[normalize-space()='Verify you are human']] | //label[contains(@class, 'ctp-checkbox-label')] | //input[@type='checkbox'] | //*[contains(@class, 'cb-lb')] | //*[@id='challenge-stage'] | //*[contains(@class, 'mark')] | //body")
+                    targets = driver.find_elements(
+                        By.XPATH,
+                        "//label[.//span[normalize-space()='Verify you are human']] | //label[contains(@class, 'ctp-checkbox-label')] | //input[@type='checkbox'] | //*[contains(@class, 'cb-lb')] | //*[@id='challenge-stage'] | //*[contains(@class, 'mark')] | //body",
+                    )
                     for el in targets:
                         if el.is_displayed():
                             ActionChains(driver).move_to_element(el).click().perform()
@@ -115,9 +130,11 @@ def _wait_for_cloudflare(driver, timeout=180):
         time.sleep(4)
     return False
 
+
 # ---------------------------------------------------------------------------
 # AuthManager
 # ---------------------------------------------------------------------------
+
 
 class AuthManager:
     """
@@ -149,26 +166,35 @@ class AuthManager:
         for attempt in range(1, 4):
             driver = None
             try:
-                logger.info(f"🌐 [Attempt {attempt}/3] Headless browser launched, fetching credentials...")
+                logger.info(
+                    f"🌐 [Attempt {attempt}/3] Headless browser launched, fetching credentials..."
+                )
 
                 options = _build_options(self.user_agent)
                 driver = webdriver.Chrome(options=options)
 
-                driver.execute_cdp_cmd("Network.setUserAgentOverride", {
-                    "userAgent": self.user_agent,
-                    "platform": "Win32",
-                    "acceptLanguage": "en-US,en;q=0.9"
-                })
+                driver.execute_cdp_cmd(
+                    "Network.setUserAgentOverride",
+                    {
+                        "userAgent": self.user_agent,
+                        "platform": "Win32",
+                        "acceptLanguage": "en-US,en;q=0.9",
+                    },
+                )
 
-                driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": STEALTH_JS})
+                driver.execute_cdp_cmd(
+                    "Page.addScriptToEvaluateOnNewDocument", {"source": STEALTH_JS}
+                )
                 driver.set_window_size(1920, 1080)
-                
+
                 # Removing the verbose navigating and loaded logs:
                 # logger.info("Navigating to Upwork homepage...")
                 driver.get("https://www.upwork.com")
 
                 if not _wait_for_cloudflare(driver, timeout=180):
-                    logger.warning(f"⚠️ Cloudflare failed (Attempt {attempt}). Retrying...")
+                    logger.warning(
+                        f"⚠️ Cloudflare failed (Attempt {attempt}). Retrying..."
+                    )
                     driver.quit()
                     time.sleep(15)
                     continue
@@ -178,13 +204,13 @@ class AuthManager:
                 time.sleep(10)
 
                 raw_cookies = driver.get_cookies()
-                new_cookies = {c['name']: c['value'] for c in raw_cookies}
+                new_cookies = {c["name"]: c["value"] for c in raw_cookies}
 
                 new_oauth_token = None
                 token_source = "none"
 
-                if new_cookies.get('visitor_gql_token'):
-                    new_oauth_token = new_cookies['visitor_gql_token']
+                if new_cookies.get("visitor_gql_token"):
+                    new_oauth_token = new_cookies["visitor_gql_token"]
                     token_source = "visitor_gql_token cookie"
 
                 if not new_oauth_token:
@@ -196,8 +222,8 @@ class AuthManager:
                         new_oauth_token = ls_token
                         token_source = "localStorage"
 
-                if not new_oauth_token and new_cookies.get('oauth2_global_js_token'):
-                    new_oauth_token = new_cookies['oauth2_global_js_token']
+                if not new_oauth_token and new_cookies.get("oauth2_global_js_token"):
+                    new_oauth_token = new_cookies["oauth2_global_js_token"]
                     token_source = "oauth2_global_js_token cookie"
 
                 if not new_oauth_token:
@@ -208,17 +234,21 @@ class AuthManager:
 
                 logger.info(f"🔑 Auth token extracted (Source: {token_source})")
 
-                cookie_string = "; ".join(f"{c['name']}={c['value']}" for c in raw_cookies)
+                cookie_string = "; ".join(
+                    f"{c['name']}={c['value']}" for c in raw_cookies
+                )
                 auth_header = f"Bearer {new_oauth_token}"
-                
+
                 self.session_timestamp = datetime.now()
                 logger.info("✅ Credentials refreshed successfully")
-                
+
                 driver.quit()
                 return auth_header, cookie_string
 
             except Exception as e:
-                logger.error(f"Browser launch error (attempt {attempt}): {e}", exc_info=True)
+                logger.error(
+                    f"Browser launch error (attempt {attempt}): {e}", exc_info=True
+                )
                 if driver:
                     try:
                         driver.quit()
@@ -242,19 +272,23 @@ class AuthManager:
             try:
                 options = _build_options(self.user_agent)
                 driver = webdriver.Chrome(options=options)
-                driver.execute_cdp_cmd("Network.setUserAgentOverride", {"userAgent": self.user_agent})
-                driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": STEALTH_JS})
+                driver.execute_cdp_cmd(
+                    "Network.setUserAgentOverride", {"userAgent": self.user_agent}
+                )
+                driver.execute_cdp_cmd(
+                    "Page.addScriptToEvaluateOnNewDocument", {"source": STEALTH_JS}
+                )
                 driver.set_page_load_timeout(30)
-                
+
                 url = f"https://www.upwork.com/jobs/{ciphertext}"
                 driver.get(url)
-                
+
                 # Wait for Cloudflare if necessary
                 _wait_for_cloudflare(driver, timeout=60)
-                
+
                 # Wait a bit for Next.js to render
                 time.sleep(3)
-                
+
                 html = driver.page_source
                 driver.quit()
                 return html
@@ -266,5 +300,6 @@ class AuthManager:
                     except:
                         pass
         return None
+
 
 auth_manager = AuthManager()

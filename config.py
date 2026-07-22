@@ -12,6 +12,7 @@ import json
 from dotenv import load_dotenv
 
 from logger import get_logger
+
 logger = get_logger(__name__)
 
 # Load .env file from the project root
@@ -44,26 +45,26 @@ try:
     with open(CONFIG_JSON_PATH, "r") as f:
         _config_data = json.load(f)
     TRACKED_URLS = _config_data.get("tracked_urls", [])
-    POLL_INTERVAL_SECONDS = _config_data.get("fetch_interval", int(os.getenv("POLL_INTERVAL_SECONDS", "10")))
+    POLL_INTERVAL_SECONDS = _config_data.get(
+        "fetch_interval", int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
+    )
 except Exception as e:
     logger.error(f"Could not load config.json: {e}")
     TRACKED_URLS = []
     POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
     _config_data = {"tracked_urls": [], "fetch_interval": POLL_INTERVAL_SECONDS}
 
+
 def add_new_tracker(url: str, channel_id: str, label: str):
     """Adds a new tracker to the config.json file and the in-memory list."""
-    new_entry = {
-        "url": url,
-        "channel_id": channel_id,
-        "label": label
-    }
+    new_entry = {"url": url, "channel_id": channel_id, "label": label}
     TRACKED_URLS.append(new_entry)
     _config_data["tracked_urls"] = TRACKED_URLS
-    
+
     with open(CONFIG_JSON_PATH, "w") as f:
         json.dump(_config_data, f, indent=4)
     logger.info(f"💾 Added new tracker to config.json: {label}")
+
 
 def remove_tracker_by_label(label: str):
     """Removes a tracker from config.json and memory by label. Returns the removed entry if found."""
@@ -78,6 +79,7 @@ def remove_tracker_by_label(label: str):
             return removed
     return None
 
+
 def update_tracker_by_label(old_label: str, new_label: str, new_url: str):
     """Updates a tracker's label and url in config.json and memory. Returns the updated entry if found."""
     global TRACKED_URLS
@@ -88,9 +90,12 @@ def update_tracker_by_label(old_label: str, new_label: str, new_url: str):
             _config_data["tracked_urls"] = TRACKED_URLS
             with open(CONFIG_JSON_PATH, "w") as f:
                 json.dump(_config_data, f, indent=4)
-            logger.info(f"🔄 Updated tracker in config.json: {old_label} -> {new_label}")
+            logger.info(
+                f"🔄 Updated tracker in config.json: {old_label} -> {new_label}"
+            )
             return entry
     return None
+
 
 # --- Discord ---------------------------------------------------------------
 # Bot token from the Discord Developer Portal
@@ -109,7 +114,7 @@ def _extract_cookie_value(cookie_string: str, cookie_name: str) -> str:
     for part in cookie_string.split(";"):
         part = part.strip()
         if part.startswith(f"{cookie_name}="):
-            return part[len(cookie_name) + 1:]
+            return part[len(cookie_name) + 1 :]
     return ""
 
 

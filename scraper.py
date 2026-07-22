@@ -67,7 +67,7 @@ class UpworkScraper:
         # and drop any blocked TCP connections pooled by curl_cffi
         self.session = requests.Session(impersonate="chrome124")
         self.session.headers.update(REQUEST_HEADERS)
-        
+
         self.session.headers["authorization"] = auth_header
         if auth_header.startswith("Bearer "):
             self.session.headers["x-oauth2-global-js-token"] = auth_header[7:]
@@ -77,7 +77,7 @@ class UpworkScraper:
         for part in cookie_string.split(";"):
             part = part.strip()
             if part.startswith("XSRF-TOKEN="):
-                xsrf = part[len("XSRF-TOKEN="):]
+                xsrf = part[len("XSRF-TOKEN=") :]
                 break
         if xsrf:
             self.session.headers["x-odesk-csrf-token"] = xsrf
@@ -87,20 +87,22 @@ class UpworkScraper:
         for part in cookie_string.split(";"):
             part = part.strip()
             if part.startswith("visitor_id="):
-                visitor_id = part[len("visitor_id="):]
+                visitor_id = part[len("visitor_id=") :]
                 break
         if visitor_id:
             self.session.headers["vnd-eo-visitorid"] = visitor_id
-        
+
         # Atomically write fresh credentials to .env
         try:
-            env_path = os.path.join(os.path.dirname(__file__), '.env')
+            env_path = os.path.join(os.path.dirname(__file__), ".env")
             set_key(env_path, "UPWORK_BEARER_TOKEN", auth_header)
             set_key(env_path, "UPWORK_COOKIES", cookie_string)
             logger.info("💾 New credentials saved to .env")
         except Exception as e:
-            logger.warning(f"Failed to save refreshed credentials to .env: {e}", exc_info=True)
-        
+            logger.warning(
+                f"Failed to save refreshed credentials to .env: {e}", exc_info=True
+            )
+
         logger.info("📡 Session headers updated")
 
     def fetch_jobs(self, search_query: str, count: int = JOBS_PER_PAGE) -> list[dict]:
@@ -142,45 +144,62 @@ class UpworkScraper:
                     timeout=30,
                 )
                 break  # If successful, break out of retry loop
-            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-                logger.warning(f"Network error during fetch_jobs (attempt {attempt+1}/{max_retries}): {e}")
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+            ) as e:
+                logger.warning(
+                    f"Network error during fetch_jobs (attempt {attempt+1}/{max_retries}): {e}"
+                )
                 if attempt == max_retries - 1:
                     logger.error("Max retries reached for network error in fetch_jobs.")
                     return []
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
             except requests.exceptions.RequestException as e:
                 logger.error(f"Request failed: {e}", exc_info=True)
                 return []
 
         # --- Handle HTTP error codes with clear messages ---
         if response.status_code == 401:
-            logger.warning("401 Unauthorized -- bearer token or cookies have expired! Triggering reactive session refresh...")
+            logger.warning(
+                "401 Unauthorized -- bearer token or cookies have expired! Triggering reactive session refresh..."
+            )
             raise SessionExpiredError("401 Unauthorized")
 
         if response.status_code == 403:
-            logger.warning(f"403 Forbidden -- Upwork is blocking this request. Response preview: {response.text[:500]}")
+            logger.warning(
+                f"403 Forbidden -- Upwork is blocking this request. Response preview: {response.text[:500]}"
+            )
             raise SessionExpiredError("403 Forbidden")
 
         if response.status_code != 200:
-            logger.error(f"Unexpected status code: {response.status_code} - {response.text[:500]}")
+            logger.error(
+                f"Unexpected status code: {response.status_code} - {response.text[:500]}"
+            )
             return []
 
         # --- Parse the JSON response ---
         try:
             data = response.json()
         except ValueError:
-            logger.error(f"Response was not valid JSON. Raw response: {response.text[:500]}")
+            logger.error(
+                f"Response was not valid JSON. Raw response: {response.text[:500]}"
+            )
             return []
 
         # Navigate the nested GraphQL response structure
         # data → search → universalSearchNuxt → visitorJobSearchV1 → results
         try:
-            search_data = data["data"]["search"]["universalSearchNuxt"]["visitorJobSearchV1"]
+            search_data = data["data"]["search"]["universalSearchNuxt"][
+                "visitorJobSearchV1"
+            ]
             results = search_data.get("results", [])
             paging = search_data.get("paging", {})
         except (KeyError, TypeError) as e:
             logger.error(f"Unexpected response structure: {e}", exc_info=True)
-            logger.error(f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
+            logger.error(
+                f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}"
+            )
             # Check for GraphQL-level errors
             if "errors" in data:
                 for err in data["errors"]:
@@ -188,7 +207,9 @@ class UpworkScraper:
             return []
 
         if not results:
-            logger.warning(f"No jobs found -- the search returned empty results. Total available: {paging.get('total', 'unknown')}")
+            logger.warning(
+                f"No jobs found -- the search returned empty results. Total available: {paging.get('total', 'unknown')}"
+            )
             return []
 
         # Log what we got
@@ -238,19 +259,28 @@ class UpworkScraper:
                     timeout=30,
                 )
                 break
-            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-                logger.warning(f"Network error during fetch_job_details (attempt {attempt+1}/{max_retries}): {e}")
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+            ) as e:
+                logger.warning(
+                    f"Network error during fetch_job_details (attempt {attempt+1}/{max_retries}): {e}"
+                )
                 if attempt == max_retries - 1:
-                    logger.error("Max retries reached for network error in fetch_job_details.")
+                    logger.error(
+                        "Max retries reached for network error in fetch_job_details."
+                    )
                     return {}
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
             except requests.exceptions.RequestException as e:
                 logger.error(f"Job details request failed: {e}", exc_info=True)
                 return {}
 
         if response.status_code != 200:
             if response.status_code in (401, 403):
-                logger.warning(f"Job details returned {response.status_code} -- triggering reactive refresh")
+                logger.warning(
+                    f"Job details returned {response.status_code} -- triggering reactive refresh"
+                )
                 raise SessionExpiredError(f"{response.status_code} on job details")
             logger.error(f"Job details returned status {response.status_code}")
             return {}
@@ -265,7 +295,7 @@ class UpworkScraper:
             details = data["data"]["jobPubDetails"]
         except (KeyError, TypeError) as e:
             if "errors" in data:
-                pass # Silently ignore the lack of permission for full details as it's expected
+                pass  # Silently ignore the lack of permission for full details as it's expected
             else:
                 logger.error(f"Unexpected job details structure: {e}", exc_info=True)
             return {}
@@ -303,7 +333,11 @@ def _parse_job_details(raw_details: dict) -> dict:
     # Calculate hire rate from stats
     total_assignments = stats.get("totalAssignments", 0) or 0
     total_with_hires = stats.get("totalJobsWithHires", 0) or 0
-    hire_rate = round((total_with_hires / total_assignments) * 100) if total_assignments > 0 else 0
+    hire_rate = (
+        round((total_with_hires / total_assignments) * 100)
+        if total_assignments > 0
+        else 0
+    )
 
     # Format total spent
     total_charges = stats.get("totalCharges", {})
@@ -313,7 +347,9 @@ def _parse_job_details(raw_details: dict) -> dict:
     job_type = info.get("type", "")
     if job_type == "FIXED":
         amount = budget_info.get("amount", 0) if budget_info else 0
-        budget_str = f"${amount:,.0f} (Fixed Price)" if amount else "Fixed Price (not listed)"
+        budget_str = (
+            f"${amount:,.0f} (Fixed Price)" if amount else "Fixed Price (not listed)"
+        )
     else:
         hr_min = extended_budget.get("hourlyBudgetMin")
         hr_max = extended_budget.get("hourlyBudgetMax")
@@ -345,7 +381,9 @@ def _parse_job_details(raw_details: dict) -> dict:
         "total_applicants": client_activity.get("totalApplicants", 0),
         "total_hired": client_activity.get("totalHired", 0),
         "positions_to_hire": client_activity.get("numberOfPositionsToHire", 1),
-        "client_location": f"{location.get('city', '')}, {location.get('country', '')}".strip(", "),
+        "client_location": f"{location.get('city', '')}, {location.get('country', '')}".strip(
+            ", "
+        ),
         "client_country": location.get("country", ""),
         "client_total_spent": total_spent,
         "client_total_jobs": total_assignments,
