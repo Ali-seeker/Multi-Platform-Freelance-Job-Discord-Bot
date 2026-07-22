@@ -63,6 +63,11 @@ class UpworkScraper:
                          (e.g., "Bearer oauth2v2_...")
             cookie_string: Fresh full cookie header string
         """
+        # Recreate the session completely to force a fresh TLS handshake
+        # and drop any blocked TCP connections pooled by curl_cffi
+        self.session = requests.Session(impersonate="chrome124")
+        self.session.headers.update(REQUEST_HEADERS)
+        
         self.session.headers["authorization"] = auth_header
         if auth_header.startswith("Bearer "):
             self.session.headers["x-oauth2-global-js-token"] = auth_header[7:]

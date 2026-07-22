@@ -52,7 +52,7 @@ window.navigator.permissions.query = (parameters) => (
 
 UA_STRING = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
 def _build_options(user_agent: str):

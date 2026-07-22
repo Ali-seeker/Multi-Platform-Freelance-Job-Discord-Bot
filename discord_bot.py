@@ -563,6 +563,7 @@ async def poll_upwork():
                 scraper.update_session(auth_header, cookie_string)
                 global_state["last_token_refresh"] = datetime.now().isoformat()
                 try:
+                    await asyncio.sleep(2)  # Give Cloudflare a moment to register the new clearance
                     jobs = await asyncio.to_thread(scraper.fetch_jobs, search_query)  # Retry once with fresh session
                 except SessionExpiredError:
                     logger.warning(f"⚠️ Retry failed (401/403) -- skipping {label}")
@@ -631,6 +632,7 @@ async def poll_upwork():
                             scraper.update_session(auth_header, cookie_string)
                             global_state["last_token_refresh"] = datetime.now().isoformat()
                             try:
+                                await asyncio.sleep(2)  # Give Cloudflare a moment to register the new clearance
                                 details = await asyncio.to_thread(scraper.fetch_job_details, ciphertext)  # Retry once
                             except SessionExpiredError:
                                 logger.warning("⚠️ Retry failed for job details")
