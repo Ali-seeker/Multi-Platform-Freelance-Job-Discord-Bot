@@ -1,19 +1,19 @@
 {
     "tracked_urls": [
         {
-            "url": "https://www.upwork.com/nx/search/jobs/?q=python%20developer&sort=recency",
+            "url": "https://www.upwork.com/nx/search/jobs/?q=Python&sort=recency",
             "channel_id": 1529026023432388728,
-            "label": "Python Jobs"
+            "label": "Python"
         },
         {
-            "url": "https://www.upwork.com/nx/search/jobs/?q=web%20scraping&sort=recency",
+            "url": "https://www.upwork.com/nx/search/jobs/?q=Scraping&sort=recency",
             "channel_id": 1529026150091853887,
-            "label": "Scraping Jobs"
+            "label": "Scraping"
         },
         {
-            "url": "https://www.upwork.com/nx/search/jobs/?q=react%20developer&sort=recency",
+            "url": "https://www.upwork.com/nx/search/jobs/?q=React&sort=recency",
             "channel_id": 1529026232401006613,
-            "label": "React Developer"
+            "label": "React"
         },
         {
             "url": "https://www.upwork.com/nx/search/jobs/?q=Wordpress&sort=recency",
