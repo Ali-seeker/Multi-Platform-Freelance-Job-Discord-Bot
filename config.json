@@ -16,9 +16,9 @@
             "label": "React Developer"
         },
         {
-            "url": "https://www.upwork.com/nx/search/jobs/?q=Wordpress%20Expert&sort=recency",
+            "url": "https://www.upwork.com/nx/search/jobs/?q=Wordpress&sort=recency",
             "channel_id": "1529362738386698312",
-            "label": "Wordpress Expert"
+            "label": "Wordpress"
         }
     ],
     "fetch_interval": 30
