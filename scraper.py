@@ -260,7 +260,7 @@ class UpworkScraper:
             details = data["data"]["jobPubDetails"]
         except (KeyError, TypeError) as e:
             if "errors" in data:
-                logger.warning("Visitor token lacks permission for full job details (this is normal for unauthenticated headless automation). Returning partial info.")
+                pass # Silently ignore the lack of permission for full details as it's expected
             else:
                 logger.error(f"Unexpected job details structure: {e}", exc_info=True)
             return {}

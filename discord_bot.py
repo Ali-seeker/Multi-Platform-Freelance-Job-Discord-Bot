@@ -246,26 +246,47 @@ def format_thread_details(details: dict, job: dict) -> str:
     lines.append("")
 
     # Section 2: Client Details
-    lines.append("__**Client Details**__")
-    lines.append(f"- **Location:** {location}")
-    lines.append(f"- **Member Since:** {member_since}")
-    lines.append(f"- **Total Spent:** {spent_str}")
-    lines.append(f"- **Jobs Posted:** {total_jobs}")
-    lines.append(f"- **Hire Rate:** {hire_rate}%")
-    lines.append(f"- **Rating:** {rating_str}")
-    lines.append(f"- **Payment:** {payment}")
-    lines.append("")
+    client_lines = []
+    if location and location != "Unknown":
+        client_lines.append(f"- **Location:** {location}")
+    if member_since and member_since != "Unknown":
+        client_lines.append(f"- **Member Since:** {member_since}")
+    if total_spent > 0:
+        client_lines.append(f"- **Total Spent:** {spent_str}")
+    if total_jobs > 0:
+        client_lines.append(f"- **Jobs Posted:** {total_jobs}")
+        client_lines.append(f"- **Hire Rate:** {hire_rate}%")
+    if rating:
+        client_lines.append(f"- **Rating:** {rating_str}")
+    if details and "payment_verified" in details:
+        client_lines.append(f"- **Payment:** {payment}")
+
+    if client_lines:
+        lines.append("__**Client Details**__")
+        lines.extend(client_lines)
+        lines.append("")
 
     # Section 3: Job Details
-    lines.append("__**Job Details**__")
-    lines.append(f"- **Type:** {job_type}")
-    lines.append(f"- **Budget:** {budget}")
-    lines.append(f"- **Duration:** {duration}")
-    lines.append(f"- **Experience Level:** {level}")
-    lines.append(f"- **Category:** {category}")
-    lines.append(f"- **Proposals:** {applicants}")
-    lines.append(f"- **Hired:** {hired}")
-    lines.append("")
+    job_lines = []
+    if job_type and job_type != "Not specified":
+        job_lines.append(f"- **Type:** {job_type}")
+    if budget and budget not in ("Not specified", "Budget not specified"):
+        job_lines.append(f"- **Budget:** {budget}")
+    if duration and duration != "Not specified":
+        job_lines.append(f"- **Duration:** {duration}")
+    if level and level != "Not specified":
+        job_lines.append(f"- **Experience Level:** {level}")
+    if category and category != "Not specified":
+        job_lines.append(f"- **Category:** {category}")
+    if details and "total_applicants" in details:
+        job_lines.append(f"- **Proposals:** {applicants}")
+    if details and "total_hired" in details:
+        job_lines.append(f"- **Hired:** {hired}")
+
+    if job_lines:
+        lines.append("__**Job Details**__")
+        lines.extend(job_lines)
+        lines.append("")
 
     # Apply link
     if job_url:
@@ -431,6 +452,9 @@ async def poll_upwork():
 
         new_count = 0
         for job in jobs:
+            if bot.is_closed():
+                break
+
             job_id = job.get("job_id", "")
             title = job.get("title", "Untitled")
 
@@ -583,6 +607,13 @@ def shutdown_handler(signum, frame):
         
     logger.info("Received shutdown signal. Closing gracefully... (Press Ctrl+C again to force quit)")
     try:
+        if poll_upwork.is_running():
+            poll_upwork.cancel()
+        if memory_monitor.is_running():
+            memory_monitor.cancel()
+        if db_cleanup_task.is_running():
+            db_cleanup_task.cancel()
+
         loop = asyncio.get_event_loop()
         if loop.is_running():
             loop.create_task(bot.close())

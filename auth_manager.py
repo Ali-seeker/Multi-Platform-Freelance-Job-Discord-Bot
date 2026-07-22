@@ -129,7 +129,8 @@ class AuthManager:
         # 39600 seconds = 11 hours
         self.user_agent = user_agent
         self.session_lifetime = session_lifetime
-        self.session_timestamp: datetime | None = None
+        # Assume existing token is fresh at startup; it will trigger reactive refresh if it isn't.
+        self.session_timestamp: datetime | None = datetime.now()
 
     def should_refresh(self) -> bool:
         """Check if a proactive refresh is due."""
