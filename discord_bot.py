@@ -597,6 +597,11 @@ async def poll_upwork():
                 if stored_hash == current_hash:
                     # Skip if we've already seen this job and it hasn't changed
                     continue
+                    
+                if stored_hash == "":
+                    # Legacy job (from before hash feature). Update hash silently and skip.
+                    save_job(job, url_source, current_hash)
+                    continue
 
                 is_updated = (stored_hash is not None)
 
