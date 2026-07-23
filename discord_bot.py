@@ -65,6 +65,9 @@ auth_manager = AuthManager(user_agent=REQUEST_HEADERS["user-agent"])
 @bot.event
 async def setup_hook():
     """Called automatically when the bot is initializing."""
+    # Initialize the database BEFORE loading cogs or starting loops
+    init_db()
+
     # Load Cogs (Modules)
     await bot.load_extension("cogs.tracker_commands")
 
@@ -77,9 +80,6 @@ async def setup_hook():
 @bot.event
 async def on_ready():
     """Called when the bot successfully connects to Discord."""
-    # Initialize the database
-    init_db()
-
     # Start dashboard
     start_dashboard()
 
