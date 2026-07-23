@@ -292,16 +292,21 @@ class UpworkScraper:
             logger.error("Job details response was not valid JSON.")
             return {}
 
+        # Check for explicitly private jobs
+        if "errors" in data:
+            for error in data.get("errors", []):
+                code = error.get("extensions", {}).get("code", "")
+                message = error.get("message", "")
+                if code == "error.job.requires.account" or "Access is restricted" in message:
+                    return {"is_private_job": True}
+
         try:
             details = data.get("data", {}).get("jobPubDetails")
             if details is None:
-                # Upwork returns null for jobPubDetails when the job is private, 
-                # restricted, invite-only, or deleted. 
-                return {"is_private_job": True}
-                
-            # If details is NOT null, it's a public job! We can safely parse it.
-            # (We ignore the 'errors' array because Upwork sometimes sends benign 
-            # OAuth warnings for public jobs, but the data is still there).
+                # If it's a visitor query and no explicit private error was thrown, 
+                # Upwork might just be hiding details. We return empty details 
+                # so the bot still posts the basic search info.
+                return {}
         except (KeyError, TypeError) as e:
             logger.error(f"Unexpected job details structure: {e}", exc_info=True)
             return {}
