@@ -219,13 +219,13 @@ class UpworkPoller(commands.Cog):
                                 except SessionExpiredError:
                                     logger.warning("⚠️ Retry failed for job details")
 
+                    # Save to database FIRST so we don't continuously fetch details for private jobs
+                    save_job(job, url_source, current_hash)
+
                     # If the scraper returned the private flag, skip it!
                     if details.get("is_private_job"):
                         logger.info(f"🔒 Skipping private/restricted job: {title[:60]}")
                         continue
-
-                    # Save to database
-                    save_job(job, url_source, current_hash)
 
                     new_count += 1
                     total_new_count += 1
