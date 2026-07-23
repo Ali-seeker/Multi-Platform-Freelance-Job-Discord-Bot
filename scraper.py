@@ -246,6 +246,7 @@ class UpworkScraper:
             "query": JOB_DETAILS_QUERY,
             "variables": {
                 "id": ciphertext,
+                "isLoggedIn": False,
             },
         }
 
@@ -294,10 +295,7 @@ class UpworkScraper:
         # Check for private job error
         if "errors" in data:
             for error in data["errors"]:
-                if (
-                    error.get("extensions", {}).get("code")
-                    == "error.job.requires.account"
-                ):
+                if error.get("extensions", {}).get("code") == "error.job.requires.account":
                     return {"is_private_job": True}
 
         try:
