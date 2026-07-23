@@ -144,7 +144,6 @@ REQUEST_HEADERS = {
     "x-odesk-csrf-token": _xsrf_token,
     "x-xsrf-token": _xsrf_token,
     "vnd-eo-visitorid": _visitor_id,
-    "cookie": COOKIES,
 }
 
 # The GraphQL query string — this is the exact query Upwork's frontend sends.

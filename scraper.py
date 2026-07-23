@@ -246,7 +246,7 @@ class UpworkScraper:
             "query": JOB_DETAILS_QUERY,
             "variables": {
                 "id": ciphertext,
-                "isLoggedIn": True,
+                "isLoggedIn": False,
             },
         }
 
@@ -256,7 +256,7 @@ class UpworkScraper:
                 response = self.session.post(
                     GRAPHQL_URL,
                     json=payload,
-                    params={"alias": "gql-query-get-job-details"},
+                    params={"alias": "gql-query-get-visitor-job-details"},
                     timeout=30,
                 )
                 break
