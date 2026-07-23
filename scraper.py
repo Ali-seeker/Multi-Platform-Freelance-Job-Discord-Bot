@@ -292,14 +292,20 @@ class UpworkScraper:
             logger.error("Job details response was not valid JSON.")
             return {}
 
-        # Check for private job error
+        # Check for explicitly private jobs
         if "errors" in data:
             for error in data["errors"]:
-                if error.get("extensions", {}).get("code") == "error.job.requires.account":
+                code = error.get("extensions", {}).get("code")
+                message = error.get("message", "")
+                if code == "error.job.requires.account" or "Access is restricted" in message:
                     return {"is_private_job": True}
 
         try:
-            details = data["data"]["jobPubDetails"]
+            details = data.get("data", {}).get("jobPubDetails")
+            if details is None:
+                # If jobPubDetails is null, it's inaccessible (deleted/restricted/private)
+                # Since public jobs now successfully return data, this safely filters out the rest.
+                return {"is_private_job": True}
         except (KeyError, TypeError) as e:
             if "errors" in data:
                 pass  # Silently ignore other expected GraphQL errors
