@@ -256,7 +256,7 @@ class UpworkScraper:
                 response = self.session.post(
                     GRAPHQL_URL,
                     json=payload,
-                    params={"alias": "gql-query-get-visitor-job-details"},
+                    params={"alias": "gql-query-get-job-details"},
                     timeout=30,
                 )
                 break
