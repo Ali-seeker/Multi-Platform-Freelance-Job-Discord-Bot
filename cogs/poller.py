@@ -187,19 +187,7 @@ class UpworkPoller(commands.Cog):
 
                     is_updated = stored_hash is not None
 
-                    # Save to database FIRST
-                    save_job(job, url_source, current_hash)
-
-                    new_count += 1
-                    total_new_count += 1
-                    global_state["jobs_posted_last_hour"] += 1
-
-                    if is_updated:
-                        logger.info(f"🔄 [UPDATED] {title[:60]}")
-                    else:
-                        logger.info(f"✨ [NEW] {title[:60]}")
-
-                    # Fetch full details for this job
+                    # Fetch full details for this job BEFORE saving
                     ciphertext = job.get("ciphertext", "")
                     details = {}
                     if ciphertext:
@@ -230,6 +218,23 @@ class UpworkPoller(commands.Cog):
                                     )  # Retry once
                                 except SessionExpiredError:
                                     logger.warning("⚠️ Retry failed for job details")
+
+                    # If the scraper returned the private flag, skip it!
+                    if details.get("is_private_job"):
+                        logger.info(f"🔒 Skipping private/restricted job: {title[:60]}")
+                        continue
+
+                    # Save to database
+                    save_job(job, url_source, current_hash)
+
+                    new_count += 1
+                    total_new_count += 1
+                    global_state["jobs_posted_last_hour"] += 1
+
+                    if is_updated:
+                        logger.info(f"🔄 [UPDATED] {title[:60]}")
+                    else:
+                        logger.info(f"✨ [NEW] {title[:60]}")
 
                     # Format and send the main message
                     content_text, embed = format_job_message(
