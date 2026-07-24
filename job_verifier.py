@@ -70,20 +70,35 @@ def filter_public_jobs(jobs_list):
             # Wait for Cloudflare on the job page if any
             _wait_for_cloudflare(driver, timeout=45)
             
-            # Allow page content to render
-            time.sleep(5)
-            
-            # Check if it's a private job
+            # Allow page content to render dynamically (wait up to 15 seconds)
             is_private = False
-            try:
-                # Check for either the image OR the exact text anywhere on the page
-                driver.find_element(By.XPATH, "//img[@alt='Private listing'] | //*[contains(text(), 'This job is a private listing')] | //*[contains(text(), 'This job is private')]")
-                is_private = True
-            except:
-                pass
+            for _ in range(15):
+                try:
+                    # Check for private or unavailable job indicators
+                    driver.find_element(By.XPATH, 
+                        "//img[@alt='Private listing'] | "
+                        "//img[contains(@src, 'private')] | "
+                        "//*[contains(text(), 'private listing')] | "
+                        "//*[contains(text(), 'This job is private')] | "
+                        "//*[contains(text(), 'no longer available')] | "
+                        "//img[contains(@src, 'no-longer-available')]"
+                    )
+                    is_private = True
+                    break
+                except:
+                    pass
+                
+                try:
+                    # Check for public job indicators (so we don't wait the full 15s if it's public)
+                    driver.find_element(By.XPATH, "//div[contains(@class, 'job-description')] | //div[@data-test='job-description-text']")
+                    break # It's public, stop waiting
+                except:
+                    pass
+                    
+                time.sleep(1)
                 
             if is_private:
-                logger.info(f"🚫 Job {job_id} is PRIVATE. Skipping.")
+                logger.info(f"🔒 Job {job_id} is PRIVATE or UNAVAILABLE. Skipping.")
                 continue
                 
             logger.info(f"✅ Job {job_id} is PUBLIC.")
