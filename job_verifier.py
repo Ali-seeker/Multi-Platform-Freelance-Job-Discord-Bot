@@ -76,8 +76,8 @@ def filter_public_jobs(jobs_list):
             # Check if it's a private job
             is_private = False
             try:
-                # The primary indicator of a private job
-                driver.find_element(By.XPATH, "//img[@alt='Private listing']")
+                # Check for either the image OR the exact text anywhere on the page
+                driver.find_element(By.XPATH, "//img[@alt='Private listing'] | //*[contains(text(), 'This job is a private listing')] | //*[contains(text(), 'This job is private')]")
                 is_private = True
             except:
                 pass
