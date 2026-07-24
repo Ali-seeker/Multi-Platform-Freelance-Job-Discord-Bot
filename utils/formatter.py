@@ -203,10 +203,12 @@ def format_thread_details(details: dict, job: dict) -> str:
     if details and "payment_verified" in details:
         client_lines.append(f"- **Payment:** {payment}")
 
+    lines.append("__**Client Details**__")
     if client_lines:
-        lines.append("__**Client Details**__")
         lines.extend(client_lines)
-        lines.append("")
+    else:
+        lines.append("*Hidden by Upwork for guests/visitors.*")
+    lines.append("")
 
     # Section 3: Job Details
     job_lines = []
@@ -225,10 +227,12 @@ def format_thread_details(details: dict, job: dict) -> str:
     if details and "total_hired" in details:
         job_lines.append(f"- **Hired:** {hired}")
 
+    lines.append("__**Job Details**__")
     if job_lines:
-        lines.append("__**Job Details**__")
         lines.extend(job_lines)
-        lines.append("")
+    else:
+        lines.append("*Not specified.*")
+    lines.append("")
 
     # Apply link
     if job_url:

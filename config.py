@@ -205,7 +205,7 @@ GRAPHQL_QUERY = """
 # Job Details GraphQL Query (Phase 2)
 # ---------------------------------------------------------------------------
 JOB_DETAILS_QUERY = """
-  fragment JobPubOpeningInfoFragment on Job {
+fragment JobPubOpeningInfoFragment on Job {
     ciphertext
     id
     type
@@ -307,7 +307,7 @@ JOB_DETAILS_QUERY = """
       length
       uri
     }
-    clientActivity {
+    clientActivity @include(if: $isLoggedIn) {
       lastBuyerActivity
       totalApplicants
       totalHired

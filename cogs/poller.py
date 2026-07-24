@@ -159,6 +159,8 @@ class UpworkPoller(commands.Cog):
                 continue
 
             new_count = 0
+            new_jobs_to_process = []
+            
             for job in jobs:
                 if self.bot.is_closed():
                     break
@@ -186,41 +188,43 @@ class UpworkPoller(commands.Cog):
                         continue
 
                     is_updated = stored_hash is not None
-
-                    # Fetch full details for this job BEFORE saving
-                    ciphertext = job.get("ciphertext", "")
-                    details = {}
-                    if ciphertext:
-                        try:
-                            details = await asyncio.to_thread(
-                                self.scraper.fetch_job_details, ciphertext
-                            )
-                        except SessionExpiredError:
-                            logger.info(
-                                "🔄 Reactive session refresh (401/403 on details)"
-                            )
-                            result = await asyncio.to_thread(
-                                self.auth_manager.refresh_session,
-                                reason="reactive refresh triggered by 401/403",
-                            )
-                            if result:
-                                auth_header, cookie_string = result
-                                self.scraper.update_session(auth_header, cookie_string)
-                                global_state["last_token_refresh"] = (
-                                    datetime.now().isoformat()
-                                )
-                                try:
-                                    await asyncio.sleep(
-                                        2
-                                    )  # Give Cloudflare a moment to register the new clearance
-                                    details = await asyncio.to_thread(
-                                        self.scraper.fetch_job_details, ciphertext
-                                    )  # Retry once
-                                except SessionExpiredError:
-                                    logger.warning("⚠️ Retry failed for job details")
-
+                    
+                    new_jobs_to_process.append((job, stored_hash, current_hash, is_updated))
+                except Exception as e:
+                    logger.error(f"Error checking hash for {job_id}: {e}")
+                    continue
+                    
+            if not new_jobs_to_process:
+                continue
+                
+            # Filter private jobs out using Selenium
+            logger.info(f"Filtering {len(new_jobs_to_process)} jobs with Selenium to drop private ones...")
+            from job_verifier import filter_public_jobs
+            
+            # Extract just the job dicts
+            job_dicts = [item[0] for item in new_jobs_to_process]
+            public_job_dicts = await asyncio.to_thread(filter_public_jobs, job_dicts)
+            
+            # Map back to tuples
+            # But wait, we must save the rejected private jobs so we don't keep polling them!
+            rejected_jobs = [item for item in new_jobs_to_process if item[0] not in public_job_dicts]
+            for r_job, _, r_current_hash, _ in rejected_jobs:
+                save_job(r_job, url_source, r_current_hash)
+                
+            public_jobs_to_process = [item for item in new_jobs_to_process if item[0] in public_job_dicts]
+            
+            for job, stored_hash, current_hash, is_updated in public_jobs_to_process:
+                if self.bot.is_closed():
+                    break
+                    
+                job_id = job.get("job_id", "")
+                title = job.get("title", "Untitled")
+                
+                try:
                     # Save to database FIRST so we don't continuously fetch details for private jobs
                     save_job(job, url_source, current_hash)
+                    
+                    details = {}
 
                     # If the scraper returned the private flag, skip it!
                     if details.get("is_private_job"):

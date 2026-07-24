@@ -288,6 +288,9 @@ class UpworkScraper:
 
         try:
             data = response.json()
+            import json
+            print("GraphQL Response JSON:")
+            print(json.dumps(data, indent=2))
         except ValueError:
             logger.error("Job details response was not valid JSON.")
             return {}
