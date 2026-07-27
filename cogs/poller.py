@@ -115,16 +115,16 @@ class UpworkPoller(commands.Cog):
 
             logger.info(f"🔍 Scanning: {label}")
 
-            # Extract search query from the URL (q parameter)
-            parsed_url = urllib.parse.urlparse(url_source)
-            query_params = urllib.parse.parse_qs(parsed_url.query)
-            search_query = query_params.get("q", [""])[0]
-
-            if not search_query:
-                logger.warning(
-                    f"No 'q' parameter found in {url_source}. Using label as fallback."
-                )
-                search_query = label
+            # Extract search query: handle both raw keywords and full URLs
+            if "upwork.com" in url_source:
+                parsed_url = urllib.parse.urlparse(url_source)
+                query_params = urllib.parse.parse_qs(parsed_url.query)
+                search_query = query_params.get("q", [""])[0]
+                if not search_query:
+                    search_query = label
+            else:
+                # If it's not a URL, assume the user just provided a raw keyword
+                search_query = url_source
 
             # --- Fetch jobs with reactive refresh on 401/403 ---
             try:
@@ -224,12 +224,12 @@ class UpworkPoller(commands.Cog):
                     # Save to database FIRST so we don't continuously fetch details for private jobs
                     save_job(job, url_source, current_hash)
                     
-                    details = {}
+                    try:
+                        details = await asyncio.to_thread(self.scraper.fetch_job_details, job.get("ciphertext", ""))
+                    except Exception as e:
+                        logger.debug(f"Failed to fetch job details: {e}")
+                        details = {}
 
-                    # If the scraper returned the private flag, skip it!
-                    if details.get("is_private_job"):
-                        logger.info(f"🔒 Skipping private/restricted job: {title[:60]}")
-                        continue
 
                     new_count += 1
                     total_new_count += 1

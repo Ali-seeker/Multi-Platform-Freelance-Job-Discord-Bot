@@ -90,8 +90,11 @@ def _wait_for_cloudflare(driver, timeout=180):
             "//iframe[contains(@src, 'challenges.cloudflare.com') or contains(@title, 'challenge')] | //div[@id='challenge-stage' or contains(@class, 'cf-turnstile')]",
         )
 
-        if not cf_indicators:
-            # If no Cloudflare indicators are found and body exists, we assume it's bypassed/safe
+        page_title = driver.title.lower()
+        is_cf_page = "just a moment" in page_title or "cloudflare" in page_title or page_title == ""
+
+        if not cf_indicators and not is_cf_page:
+            # If no Cloudflare indicators are found, page title is safe, and body exists, we assume it's bypassed/safe
             if driver.find_elements(By.XPATH, "//body"):
                 return True
 

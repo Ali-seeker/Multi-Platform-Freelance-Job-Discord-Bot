@@ -19,6 +19,11 @@
             "url": "https://www.upwork.com/nx/search/jobs/?q=Wordpress&sort=recency",
             "channel_id": "1529362738386698312",
             "label": "Wordpress"
+        },
+        {
+            "url": "https://www.upwork.com/nx/search/jobs/?q=javascript&sort=recency",
+            "channel_id": "1531255779200598096",
+            "label": "javascript"
         }
     ],
     "fetch_interval": 20

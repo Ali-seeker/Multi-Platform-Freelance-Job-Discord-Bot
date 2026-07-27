@@ -203,12 +203,10 @@ def format_thread_details(details: dict, job: dict) -> str:
     if details and "payment_verified" in details:
         client_lines.append(f"- **Payment:** {payment}")
 
-    lines.append("__**Client Details**__")
     if client_lines:
+        lines.append("__**Client Details**__")
         lines.extend(client_lines)
-    else:
-        lines.append("*Hidden by Upwork for guests/visitors.*")
-    lines.append("")
+        lines.append("")
 
     # Section 3: Job Details
     job_lines = []

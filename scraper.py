@@ -279,18 +279,15 @@ class UpworkScraper:
 
         if response.status_code != 200:
             if response.status_code in (401, 403):
-                logger.warning(
+                logger.debug(
                     f"Job details returned {response.status_code} -- triggering reactive refresh"
                 )
                 raise SessionExpiredError(f"{response.status_code} on job details")
-            logger.error(f"Job details returned status {response.status_code}")
+            logger.debug(f"Job details returned status {response.status_code}")
             return {}
 
         try:
             data = response.json()
-            import json
-            print("GraphQL Response JSON:")
-            print(json.dumps(data, indent=2))
         except ValueError:
             logger.error("Job details response was not valid JSON.")
             return {}
