@@ -1,0 +1,13 @@
+{
+    "channel_name": "guru",
+    "channel_id": "1552937946351407234",
+    "tracked_queries": [
+        {
+            "query": "automation",
+            "url": "https://www.guru.com/d/jobs/?q=automation",
+            "label": "Automation"
+        }
+    ],
+    "fetch_interval": 10,
+    "jobs_per_page": 10
+}

@@ -1,31 +1,25 @@
 """
-db.py — SQLite database module for storing scraped Upwork jobs.
+db.py — SQLite database module for multi-platform freelancing job alerts.
 
-Uses Python's built-in sqlite3 (no extra dependencies).
+Each platform has its own dedicated table in the database (e.g. upwork_jobs, guru_jobs, etc.).
+Uses Python's built-in sqlite3.
 
-Schema Design Notes:
-─────────────────────
-• job_id (TEXT PRIMARY KEY) — Upwork's unique job ID (e.g., "2072926869803851328").
-  Using TEXT instead of INTEGER because these IDs are very large numbers that
-  could exceed SQLite's integer range, and we never do math on them.
-
-• skills (TEXT) — Stored as a comma-separated string (e.g., "Python, Django, React").
-  For Phase 1 this is simple and queryable with LIKE. If you later need to
-  filter by individual skills, consider a separate job_skills junction table.
-
-• fetched_at (TIMESTAMP) — Automatically set to the current UTC time when the
-  row is inserted. Useful for knowing when YOU scraped the job, vs. when it
-  was posted on Upwork (posted_time).
-
-Deduplication Strategy:
-───────────────────────
-We use INSERT OR IGNORE which silently skips the insert if a row with the
-same job_id (PRIMARY KEY) already exists. This is simpler and faster than
-checking job_exists() before every insert, and it's safe for concurrent use.
-We still provide job_exists() for cases where you want to check before
-doing other processing (e.g., deciding whether to post to Discord).
+Schema Design:
+──────────────
+• job_id (TEXT) — Platform's unique job ID.
+• url_source (TEXT) — Search query or URL the job was found under.
+• title (TEXT NOT NULL) — Job title.
+• description (TEXT) — Full job description.
+• budget (TEXT) — Budget or rate string.
+• skills (TEXT) — Comma-separated skill names.
+• posted_time (TEXT) — When the job was posted (ISO 8601 or raw string).
+• fetched_at (TIMESTAMP) — When we scraped it (UTC).
+• content_hash (TEXT) — sha256 hash of title|description|budget to detect updates.
+• PRIMARY KEY (job_id, url_source)
 """
 
+import os
+import re
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from logger import get_logger
@@ -33,84 +27,96 @@ from logger import get_logger
 logger = get_logger(__name__)
 
 # Database file lives in the project root
-DB_PATH = "jobs.db"
+DB_PATH = os.path.join(os.path.dirname(__file__), "jobs.db")
 
 
 def _get_connection() -> sqlite3.Connection:
     """Create a connection to the SQLite database."""
     conn = sqlite3.connect(DB_PATH)
-    # Return rows as sqlite3.Row objects so we can access columns by name
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db() -> None:
+def get_platform_table(platform: str = "upwork") -> str:
+    """Sanitizes platform name and returns the table name (e.g., 'upwork_jobs')."""
+    clean = re.sub(r"[^a-zA-Z0-9_]", "", platform.strip().lower())
+    return f"{clean}_jobs" if clean else "upwork_jobs"
+
+
+def init_db(platform: str = "upwork") -> None:
     """
-    Create the jobs table if it doesn't already exist.
-    Also handles migration from the old schema (single primary key)
-    to the new schema (composite primary key with url_source).
+    Initializes the database table for a specific platform.
+    Also handles backward-compatible migration from legacy 'jobs' table to 'upwork_jobs'.
     """
+    table_name = get_platform_table(platform)
     conn = _get_connection()
     try:
-        cursor = conn.execute("PRAGMA table_info(jobs)")
-        columns = [row["name"] for row in cursor.fetchall()]
-
-        if columns and "url_source" not in columns:
-            logger.info("Migrating database to new schema (adding url_source)...")
-            conn.execute("ALTER TABLE jobs RENAME TO jobs_old")
-
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS jobs (
-                job_id      TEXT,                -- Upwork's unique job identifier
-                url_source  TEXT,                -- The URL/query this job was found under
-                title       TEXT NOT NULL,       -- Job title (with H^ markers stripped)
-                description TEXT,                -- Full job description
-                budget      TEXT,                -- Budget string (e.g., "$800" or "$20-$25/hr")
-                skills      TEXT,                -- Comma-separated skill names
-                posted_time TEXT,                -- When the job was posted on Upwork (ISO 8601)
-                fetched_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- When we scraped it
-                content_hash TEXT DEFAULT '',    -- Hash of the job content to detect updates
+        # Create platform table if it doesn't exist
+        conn.execute(f"""
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                job_id       TEXT,
+                url_source   TEXT,
+                title        TEXT NOT NULL,
+                description  TEXT,
+                budget       TEXT,
+                skills       TEXT,
+                posted_time  TEXT,
+                fetched_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                content_hash TEXT DEFAULT '',
                 PRIMARY KEY (job_id, url_source)
             )
         """)
 
-        if columns and "url_source" not in columns:
-            conn.execute("""
-                INSERT INTO jobs (job_id, url_source, title, description, budget, skills, posted_time, fetched_at)
-                SELECT job_id, 'legacy', title, description, budget, skills, posted_time, fetched_at
-                FROM jobs_old
-            """)
-            conn.execute("DROP TABLE jobs_old")
-            logger.info("Migration complete.")
-        elif columns and "content_hash" not in columns:
-            logger.info("Migrating database to add content_hash column...")
+        # Check existing columns in the table (for column migrations)
+        cursor = conn.execute(f"PRAGMA table_info({table_name})")
+        columns = [row["name"] for row in cursor.fetchall()]
+        if columns and "content_hash" not in columns:
             try:
-                conn.execute("ALTER TABLE jobs ADD COLUMN content_hash TEXT DEFAULT ''")
-                logger.info("Migration to add content_hash complete.")
+                conn.execute(f"ALTER TABLE {table_name} ADD COLUMN content_hash TEXT DEFAULT ''")
+                logger.info(f"Added content_hash column to {table_name}.")
             except Exception as e:
-                logger.error(f"Migration error for content_hash: {e}")
+                logger.error(f"Migration error for {table_name} content_hash: {e}")
+
+        # Migration from legacy 'jobs' table to 'upwork_jobs'
+        if platform.lower() == "upwork":
+            cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='jobs'")
+            has_legacy_jobs = cur.fetchone() is not None
+            if has_legacy_jobs:
+                # Migrate records from legacy 'jobs' to 'upwork_jobs'
+                try:
+                    conn.execute("""
+                        INSERT OR IGNORE INTO upwork_jobs (job_id, url_source, title, description, budget, skills, posted_time, fetched_at, content_hash)
+                        SELECT job_id, url_source, title, description, budget, skills, posted_time, fetched_at, 
+                               COALESCE(content_hash, '')
+                        FROM jobs
+                    """)
+                    logger.info("📦 Migrated existing records from legacy 'jobs' table to 'upwork_jobs'.")
+                except Exception as e:
+                    logger.warning(f"Note during legacy migration: {e}")
 
         conn.commit()
     finally:
         conn.close()
 
 
-def save_job(job_dict: dict, url_source: str, content_hash: str = "") -> bool:
+def save_job(job_dict: dict, url_source: str, content_hash: str = "", platform: str = "upwork") -> bool:
     """
-    Insert or replace a job into the database. Returns True.
+    Insert or replace a job into the platform's database table.
     """
+    table_name = get_platform_table(platform)
     conn = _get_connection()
     try:
-        cursor = conn.execute(
-            """
-            INSERT OR REPLACE INTO jobs (job_id, url_source, title, description, budget, skills, posted_time, fetched_at, content_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        conn.execute(
+            f"""
+            INSERT OR REPLACE INTO {table_name} (
+                job_id, url_source, title, description, budget, skills, posted_time, fetched_at, content_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                job_dict["job_id"],
+                str(job_dict.get("job_id", "")),
                 url_source,
-                job_dict["title"],
-                job_dict["description"],
+                job_dict.get("title", "Untitled"),
+                job_dict.get("description", ""),
                 job_dict.get("budget", ""),
                 job_dict.get("skills", ""),
                 job_dict.get("posted_time", ""),
@@ -124,31 +130,33 @@ def save_job(job_dict: dict, url_source: str, content_hash: str = "") -> bool:
         conn.close()
 
 
-def job_exists(job_id: str, url_source: str) -> bool:
+def job_exists(job_id: str, url_source: str, platform: str = "upwork") -> bool:
     """
-    Check if a job with this ID and URL source is already in the database.
+    Check if a job with this ID and URL source is already in the platform table.
     """
+    table_name = get_platform_table(platform)
     conn = _get_connection()
     try:
         row = conn.execute(
-            "SELECT 1 FROM jobs WHERE job_id = ? AND url_source = ?",
-            (job_id, url_source),
+            f"SELECT 1 FROM {table_name} WHERE job_id = ? AND url_source = ?",
+            (str(job_id), url_source),
         ).fetchone()
         return row is not None
     finally:
         conn.close()
 
 
-def get_job_hash(job_id: str, url_source: str):
+def get_job_hash(job_id: str, url_source: str, platform: str = "upwork") -> str | None:
     """
     Returns the content_hash of the job if it exists, otherwise None.
     If the job exists but has no hash (legacy data), returns an empty string.
     """
+    table_name = get_platform_table(platform)
     conn = _get_connection()
     try:
         row = conn.execute(
-            "SELECT content_hash FROM jobs WHERE job_id = ? AND url_source = ?",
-            (job_id, url_source),
+            f"SELECT content_hash FROM {table_name} WHERE job_id = ? AND url_source = ?",
+            (str(job_id), url_source),
         ).fetchone()
         if row:
             return row["content_hash"] if row["content_hash"] is not None else ""
@@ -157,29 +165,59 @@ def get_job_hash(job_id: str, url_source: str):
         conn.close()
 
 
-def get_job_count() -> int:
-    """Return the total number of jobs in the database."""
+def get_job_count(platform: str = "upwork") -> int:
+    """Return the total number of jobs stored for a given platform."""
+    table_name = get_platform_table(platform)
     conn = _get_connection()
     try:
-        row = conn.execute("SELECT COUNT(*) as cnt FROM jobs").fetchone()
-        return row["cnt"]
+        row = conn.execute(f"SELECT COUNT(*) as cnt FROM {table_name}").fetchone()
+        return row["cnt"] if row else 0
+    except sqlite3.OperationalError:
+        return 0
     finally:
         conn.close()
 
 
-def cleanup_old_jobs(days: int = 14) -> int:
+def cleanup_old_jobs(days: int = 14, platform: str = "upwork") -> int:
     """
-    Remove jobs from the database that were fetched more than `days` ago.
+    Remove jobs from the platform's table that were fetched more than `days` ago.
     Returns the number of rows deleted.
     """
+    table_name = get_platform_table(platform)
     conn = _get_connection()
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-        cursor = conn.execute("DELETE FROM jobs WHERE fetched_at < ?", (cutoff,))
+        cursor = conn.execute(f"DELETE FROM {table_name} WHERE fetched_at < ?", (cutoff,))
         conn.commit()
         deleted = cursor.rowcount
         if deleted > 0:
-            logger.info(f"Cleaned up {deleted} jobs older than {days} days.")
+            logger.info(f"Cleaned up {deleted} jobs older than {days} days from {table_name}.")
         return deleted
     finally:
         conn.close()
+
+
+def get_all_job_counts() -> dict[str, int]:
+    """Return a dictionary of job counts across all platform tables."""
+    conn = _get_connection()
+    try:
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_jobs'"
+        )
+        tables = [row["name"] for row in cursor.fetchall()]
+        counts = {}
+        for tbl in tables:
+            platform = tbl[:-5]  # strip '_jobs'
+            row = conn.execute(f"SELECT COUNT(*) as cnt FROM {tbl}").fetchone()
+            counts[platform] = row["cnt"] if row else 0
+        return counts
+    finally:
+        conn.close()
+
+
+def init_all_platform_dbs(platforms: list[str] | None = None) -> None:
+    """Initializes tables for a list of platforms (defaults to ['upwork'])."""
+    if platforms is None:
+        platforms = ["upwork"]
+    for p in platforms:
+        init_db(p)
