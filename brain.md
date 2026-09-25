@@ -15,7 +15,7 @@ A modular, multi-platform **Discord bot** system that monitors freelance marketp
 3. **Independent or Parallel Execution**: Each platform can be run individually (`python main.py --platform upwork` or `python main.py --platform guru`), all together in parallel in one process (`python main.py --all`), or across separate terminals.
 4. **Fast Polling Without Selenium Job Verification**: 
    - Upwork: Uses GraphQL scraper + Turnstile session refresh when tokens expire.
-   - Guru: Uses fast HTTP scraping (`curl_cffi` + `BeautifulSoup`) requiring 0 tokens, 0 cookies, and 0 Selenium.
+   - Guru: Uses fast HTTP scraping (`curl_cffi` + `BeautifulSoup`) requiring 0 tokens, 0 cookies, and 0 Selenium. Automatically paginates `/d/jobs/pg/{page}/` for large batches (`limit > 20`).
 
 ---
 

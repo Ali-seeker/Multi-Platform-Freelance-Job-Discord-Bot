@@ -33,6 +33,7 @@ class GuruScraper:
     def fetch_jobs(self, search_query: str, limit: int = 10) -> list[dict]:
         """
         Fetches job postings matching a search query from Guru.com.
+        Automatically paginates across Guru search pages if limit > 20 (20 jobs/page).
 
         Args:
             search_query: Search term (e.g., 'automation', 'python')
@@ -42,27 +43,49 @@ class GuruScraper:
             List of standardized job dictionaries.
         """
         encoded_query = urllib.parse.quote(search_query)
-        search_url = f"{GURU_BASE_URL}/d/jobs/?q={encoded_query}"
+        all_jobs = []
+        page = 1
+        max_pages = max(1, (limit + 19) // 20)
 
-        max_retries = 3
-        html = ""
-        for attempt in range(max_retries):
-            try:
-                response = self.session.get(search_url, timeout=25)
-                if response.status_code == 200:
-                    html = response.text
-                    break
-                logger.warning(
-                    f"Guru search returned HTTP {response.status_code} (attempt {attempt + 1}/{max_retries})"
-                )
-            except Exception as e:
-                logger.warning(f"Error requesting Guru jobs: {e} (attempt {attempt + 1}/{max_retries})")
+        while page <= max_pages and len(all_jobs) < limit:
+            if page == 1:
+                search_url = f"{GURU_BASE_URL}/d/jobs/?q={encoded_query}"
+            else:
+                search_url = f"{GURU_BASE_URL}/d/jobs/pg/{page}/?q={encoded_query}"
 
-        if not html:
-            logger.error(f"Failed to fetch Guru jobs for query '{search_query}'.")
-            return []
+            max_retries = 3
+            html = ""
+            for attempt in range(max_retries):
+                try:
+                    response = self.session.get(search_url, timeout=25)
+                    if response.status_code == 200:
+                        html = response.text
+                        break
+                    logger.warning(
+                        f"Guru search returned HTTP {response.status_code} on page {page} (attempt {attempt + 1}/{max_retries})"
+                    )
+                except Exception as e:
+                    logger.warning(f"Error requesting Guru jobs on page {page}: {e} (attempt {attempt + 1}/{max_retries})")
 
-        return self.parse_jobs_html(html, search_query, limit=limit)
+            if not html:
+                logger.error(f"Failed to fetch Guru jobs for query '{search_query}' on page {page}.")
+                break
+
+            remaining = limit - len(all_jobs)
+            page_jobs = self.parse_jobs_html(html, search_query, limit=remaining)
+            if not page_jobs:
+                break
+
+            all_jobs.extend(page_jobs)
+            if len(page_jobs) < 20:
+                # Reached last page of results
+                break
+
+            page += 1
+
+        pages_scraped = page if all_jobs else 0
+        logger.info(f"[GURU] 📄 Scraped {len(all_jobs)} total jobs across {pages_scraped} page(s) from Guru for '{search_query}'.")
+        return all_jobs
 
     def parse_jobs_html(self, html: str, search_query: str, limit: int = 10) -> list[dict]:
         """
@@ -141,5 +164,5 @@ class GuruScraper:
                 logger.warning(f"Error parsing Guru job card: {e}")
                 continue
 
-        logger.info(f"[GURU] 📄 Parsed {len(parsed_jobs)} jobs from Guru for '{search_query}'.")
+        logger.debug(f"[GURU] Parsed {len(parsed_jobs)} jobs from current page for '{search_query}'.")
         return parsed_jobs
