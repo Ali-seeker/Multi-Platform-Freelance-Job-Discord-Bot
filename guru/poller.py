@@ -85,7 +85,7 @@ class GuruPoller(commands.Cog):
             url_source = query_config.get("url", f"https://www.guru.com/d/jobs/?q={search_query}")
             label = query_config.get("label", search_query or "Guru")
 
-            logger.info(f"[GURU] 🔍 Scanning query: '{label}' (Batch limit: {JOBS_PER_PAGE} jobs)")
+            logger.info(f"[GURU] [Step 1/5] 🔍 Scanning query: '{label}' (Batch limit: {JOBS_PER_PAGE} jobs)...")
 
             try:
                 jobs = await asyncio.to_thread(self.scraper.fetch_jobs, search_query, JOBS_PER_PAGE)
@@ -95,10 +95,12 @@ class GuruPoller(commands.Cog):
                 continue
 
             if not jobs:
+                logger.info(f"[GURU] [Step 2/5] ℹ️ No jobs returned for '{label}'.")
                 await asyncio.sleep(1)
                 continue
 
-            logger.info(f"[GURU] 🗄️ Checking {len(jobs)} jobs against 'guru_jobs' table...")
+            logger.info(f"[GURU] [Step 2/5] 🌐 Scraped {len(jobs)} jobs from Guru search")
+            logger.info(f"[GURU] [Step 3/5] 🗄️ Checking {len(jobs)} jobs against 'guru_jobs' table...")
             new_count = 0
 
             for job in jobs:
@@ -124,17 +126,15 @@ class GuruPoller(commands.Cog):
                         continue
 
                     is_updated = stored_hash is not None
+                    prefix = "🔄 [UPDATED]" if is_updated else "✨ [NEW]"
 
                     # Save to guru_jobs table in SQLite
                     save_job(job, url_source, current_hash, platform="guru")
-                    logger.info(f"[GURU] 💾 Saved to 'guru_jobs': {title[:50]}")
+                    logger.info(f"[GURU] [Step 4/5] 💾 {prefix} Saved to 'guru_jobs': {job_id} | {title[:50]}")
 
                     new_count += 1
                     total_new_count += 1
                     global_state["jobs_posted_last_hour"] += 1
-
-                    prefix = "🔄 [UPDATED]" if is_updated else "✨ [NEW]"
-                    logger.info(f"[GURU] {prefix} ({label}) {title[:60]}")
 
                     content_text, embed = format_guru_job_message(
                         job, is_updated=is_updated, query_label=label
@@ -182,7 +182,7 @@ class GuruPoller(commands.Cog):
                                 await send_with_retry(thread.send, part)
                         else:
                             await send_with_retry(thread.send, thread_text)
-                    logger.info(f"[GURU] 💬 Successfully sent to #{channel.name}")
+                    logger.info(f"[GURU] [Step 5/5] 💬 Sent to #{channel.name} with details thread")
 
                 except Exception as e:
                     logger.error(f"[GURU] Error processing job {job_id} ({title}): {e}", exc_info=True)
@@ -190,7 +190,9 @@ class GuruPoller(commands.Cog):
                     continue
 
             if new_count > 0:
-                logger.info(f"[GURU] ✅ {label}: Posted {new_count} new jobs to #{channel.name}.")
+                logger.info(f"[GURU] ✅ Cycle complete for '{label}': {new_count} new jobs posted to #{channel.name}.")
+            else:
+                logger.info(f"[GURU] ⏭️ Cycle complete for '{label}': No new unposted jobs.")
 
             await asyncio.sleep(2)
 

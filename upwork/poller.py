@@ -126,7 +126,7 @@ class UpworkPoller(commands.Cog):
                 encoded = urllib.parse.quote(search_query)
                 url_source = f"https://www.upwork.com/nx/search/jobs/?q={encoded}&sort=recency"
 
-            logger.info(f"[UPWORK] 🔍 Scanning query: '{label}' (Batch limit: {JOBS_PER_PAGE} jobs)")
+            logger.info(f"[UPWORK] [Step 1/5] 🔍 Scanning query: '{label}' (Batch limit: {JOBS_PER_PAGE} jobs)...")
 
             # --- Fetch jobs with reactive refresh on 401/403 ---
             try:
@@ -154,10 +154,12 @@ class UpworkPoller(commands.Cog):
                     continue
 
             if not jobs:
+                logger.info(f"[UPWORK] [Step 2/5] ℹ️ No jobs returned for '{label}'.")
                 await asyncio.sleep(1)
                 continue
 
-            logger.info(f"[UPWORK] 🗄️ Checking {len(jobs)} jobs against 'upwork_jobs' table...")
+            logger.info(f"[UPWORK] [Step 2/5] 🌐 Received {len(jobs)} jobs from Upwork GraphQL API")
+            logger.info(f"[UPWORK] [Step 3/5] 🗄️ Checking {len(jobs)} jobs against 'upwork_jobs' table...")
             new_count = 0
 
             # Process jobs directly (private job checking with Selenium is removed)
@@ -187,10 +189,11 @@ class UpworkPoller(commands.Cog):
                         continue
 
                     is_updated = stored_hash is not None
+                    prefix = "🔄 [UPDATED]" if is_updated else "✨ [NEW]"
 
                     # Save to Upwork platform DB table FIRST
                     save_job(job, url_source, current_hash, platform="upwork")
-                    logger.info(f"[UPWORK] 💾 Saved to 'upwork_jobs': {title[:50]}")
+                    logger.info(f"[UPWORK] [Step 4/5] 💾 {prefix} Saved to 'upwork_jobs': {job_id} | {title[:50]}")
 
                     # Fetch job details best-effort
                     ciphertext = job.get("ciphertext", "")
@@ -207,9 +210,6 @@ class UpworkPoller(commands.Cog):
                     new_count += 1
                     total_new_count += 1
                     global_state["jobs_posted_last_hour"] += 1
-
-                    prefix = "🔄 [UPDATED]" if is_updated else "✨ [NEW]"
-                    logger.info(f"[UPWORK] {prefix} ({label}) {title[:60]}")
 
                     # Format message with keyword tag
                     content_text, embed = format_job_message(
@@ -259,7 +259,7 @@ class UpworkPoller(commands.Cog):
                                 await send_with_retry(thread.send, part)
                         else:
                             await send_with_retry(thread.send, thread_text)
-                    logger.info(f"[UPWORK] 💬 Successfully sent to #{channel.name}")
+                    logger.info(f"[UPWORK] [Step 5/5] 💬 Sent to #{channel.name} with details thread")
 
                 except Exception as e:
                     logger.error(f"[UPWORK] Error processing job {job_id} ({title}): {e}", exc_info=True)
@@ -267,7 +267,9 @@ class UpworkPoller(commands.Cog):
                     continue
 
             if new_count > 0:
-                logger.info(f"✅ [Upwork] {label}: Posted {new_count} new jobs to #{channel.name}.")
+                logger.info(f"[UPWORK] ✅ Cycle complete for '{label}': {new_count} new jobs posted to #{channel.name}.")
+            else:
+                logger.info(f"[UPWORK] ⏭️ Cycle complete for '{label}': No new unposted jobs.")
 
             # Pause briefly between queries to avoid slamming API
             await asyncio.sleep(2)

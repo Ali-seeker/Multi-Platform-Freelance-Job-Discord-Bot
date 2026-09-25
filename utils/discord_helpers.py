@@ -49,6 +49,73 @@ def split_message(text: str, limit: int = 1900) -> list[str]:
     return parts
 
 
+def parse_posted_time(raw_time: str) -> tuple[datetime | None, str, str]:
+    """
+    Parses a raw posted time (ISO timestamp from Upwork, or relative/date string from Guru)
+    into a timezone-aware UTC datetime and Discord timestamp strings.
+
+    Returns:
+        (datetime_utc, exact_display, relative_display)
+        - datetime_utc: datetime object in UTC (or None if unparseable)
+        - exact_display: Discord <t:UNIX:f> (localized date + time) and UTC text
+        - relative_display: Discord <t:UNIX:R> (dynamic relative time like '10 minutes ago')
+    """
+    if not raw_time:
+        return None, "Unknown", "Unknown"
+
+    raw = raw_time.strip()
+    dt = None
+
+    # 1. Try parsing ISO 8601 (Upwork format: 2026-09-24T18:07:56.140Z)
+    try:
+        clean = raw.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(clean)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+    except (ValueError, TypeError):
+        pass
+
+    # 2. Try parsing relative time strings (Guru format: '13 hrs ago', '25 mins ago', 'yesterday')
+    if not dt:
+        import re
+        from datetime import timedelta
+        now = datetime.now(timezone.utc)
+        m = re.search(r"(\d+)\s*(sec|second|s|min|minute|m|hr|hour|h|day|d)s?\s*ago", raw, re.IGNORECASE)
+        if m:
+            val = int(m.group(1))
+            unit = m.group(2).lower()
+            if unit.startswith("s"):
+                dt = now - timedelta(seconds=val)
+            elif unit.startswith("m"):
+                dt = now - timedelta(minutes=val)
+            elif unit.startswith("h"):
+                dt = now - timedelta(hours=val)
+            elif unit.startswith("d"):
+                dt = now - timedelta(days=val)
+        elif "yesterday" in raw.lower():
+            dt = now - timedelta(days=1)
+        elif "just now" in raw.lower() or "recent" in raw.lower():
+            dt = now
+        else:
+            # 3. Try parsing date format: 'on Sep 24, 2026' or 'Sep 24, 2026'
+            m_date = re.search(r"(?:on\s+)?([A-Za-z]{3,}\s+\d{1,2},\s*\d{4})", raw, re.IGNORECASE)
+            if m_date:
+                try:
+                    dt = datetime.strptime(m_date.group(1), "%b %d, %Y").replace(tzinfo=timezone.utc)
+                except Exception:
+                    pass
+
+    if dt:
+        epoch = int(dt.timestamp())
+        exact_display = f"<t:{epoch}:f>"
+        relative_display = f"<t:{epoch}:R>"
+        return dt, exact_display, relative_display
+
+    return None, raw, raw
+
+
 def format_relative_time(iso_timestamp: str) -> str:
     """
     Convert an ISO 8601 timestamp to a human-readable relative time string.
@@ -57,27 +124,12 @@ def format_relative_time(iso_timestamp: str) -> str:
     if not iso_timestamp:
         return "Unknown"
 
-    try:
-        clean = iso_timestamp.replace("Z", "+00:00")
-        posted = datetime.fromisoformat(clean)
-        now = datetime.now(timezone.utc)
-        diff = now - posted
+    dt, _, rel = parse_posted_time(iso_timestamp)
+    if dt:
+        epoch = int(dt.timestamp())
+        return f"<t:{epoch}:R>"
 
-        seconds = int(diff.total_seconds())
-        if seconds < 0:
-            return "Just now"
-        if seconds < 60:
-            return f"{seconds} seconds ago"
-        minutes = seconds // 60
-        if minutes < 60:
-            return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
-        hours = minutes // 60
-        if hours < 24:
-            return f"{hours} hour{'s' if hours != 1 else ''} ago"
-        days = hours // 24
-        return f"{days} day{'s' if days != 1 else ''} ago"
-    except (ValueError, TypeError):
-        return "Unknown"
+    return iso_timestamp
 
 
 async def get_or_create_platform_channel(

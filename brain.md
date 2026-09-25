@@ -165,3 +165,21 @@ CREATE TABLE IF NOT EXISTS {platform}_jobs (
 4. **Run in Separate Terminals**:
    - Terminal 1: `python main.py --platform upwork`
    - Terminal 2: `python main.py --platform guru`
+
+---
+
+## 6. Timestamps & Logging Contracts
+
+### Exact Timestamp Formatting
+- All platforms parse raw posted time via `utils.discord_helpers.parse_posted_time(raw_time)`.
+- Returns `(dt, exact_discord, relative_discord)` where `exact_discord` is `<t:{epoch}:f>` and `relative_discord` is `<t:{epoch}:R>`.
+- `embed.timestamp` is set to `dt` (the actual job post time), showing natively in Discord embed footers.
+- Detail threads show `- **Posted Exact:** <t:{epoch}:f> (<t:{epoch}:R>)`.
+
+### Step-by-Step Logging Standard
+Every poller loop logs 5 numbered steps prefixed by `[{PLATFORM}]`:
+- `[PLATFORM] [Step 1/5] 🔍 Scanning query: '{label}'...`
+- `[PLATFORM] [Step 2/5] 🌐 Received {n} jobs from API/Scraper`
+- `[PLATFORM] [Step 3/5] 🗄️ Checking {n} jobs against '{platform}_jobs' table...`
+- `[PLATFORM] [Step 4/5] 💾 {prefix} Saved to '{platform}_jobs': {id} | {title}`
+- `[PLATFORM] [Step 5/5] 💬 Sent to #{channel} with details thread`

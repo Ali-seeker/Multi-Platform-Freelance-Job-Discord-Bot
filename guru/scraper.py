@@ -105,17 +105,23 @@ class GuruScraper:
 
                 # Metadata (posted time & quotes count)
                 meta_el = card.select_one(".jobRecord__meta")
-                meta_text = " ".join(meta_el.text.split()) if meta_el else ""
-
                 posted_time = "Recent"
                 quotes_count = "0"
-                if meta_text:
-                    time_match = re.search(r"Posted\s+([^•\–\—\-\|]+)", meta_text, re.IGNORECASE)
-                    if time_match:
-                        posted_time = time_match.group(1).strip()
-                    quotes_match = re.search(r"(\d+)\s+Quotes\s+Received", meta_text, re.IGNORECASE)
-                    if quotes_match:
-                        quotes_count = quotes_match.group(1)
+                if meta_el:
+                    strongs = meta_el.select("strong")
+                    if strongs:
+                        posted_time = strongs[0].text.strip()
+                        if len(strongs) > 1:
+                            raw_q = strongs[1].text.strip()
+                            quotes_count = re.sub(r"\D", "", raw_q) or raw_q
+                    else:
+                        meta_text = " ".join(meta_el.text.split())
+                        time_match = re.search(r"Posted\s+([^·•\–\—\-\|\ufffd]+)", meta_text, re.IGNORECASE)
+                        if time_match:
+                            posted_time = time_match.group(1).strip()
+                        quotes_match = re.search(r"(\d+)\s+Quotes", meta_text, re.IGNORECASE)
+                        if quotes_match:
+                            quotes_count = quotes_match.group(1)
 
                 # Skills
                 skills_list = [s.text.strip() for s in card.select(".skillsList__skill") if s.text.strip()]

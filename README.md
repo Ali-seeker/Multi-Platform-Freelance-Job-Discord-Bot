@@ -120,4 +120,37 @@ Configure tracked search queries, intervals, and batch sizes in `{platform}/conf
 }
 ```
 - `fetch_interval`: Delay between polling cycles in seconds.
-- `jobs_per_page`: Number of jobs fetched per search query.
+- `jobs_per_page`: Number of jobs fetched per search query (e.g. 10 or 20).
+
+---
+
+## ⏱️ Real-Time Recency & Exact Timestamps
+
+All platforms poll the freshest, most recently posted jobs first:
+- **Upwork:** Search API queries are sorted by `"sort": "recency"`.
+- **Guru:** Search results are ordered by `Newest` by default.
+
+When jobs are sent to Discord:
+1. **Dynamic Discord Timestamps:** Parsed timestamps are rendered using Discord markdown `<t:UNIX:f>` (exact date & time) and `<t:UNIX:R>` (dynamic relative time like `5 minutes ago`), automatically localized to the viewer's device timezone.
+2. **Official Embed Timestamp:** `embed.timestamp` is set directly to the job's published time, rendering in the Discord embed footer.
+3. **Exact Thread Timestamps:** Job discussion threads display the exact posted time and relative age.
+
+---
+
+## 📋 Clear Step-by-Step Terminal Logs
+
+Every polling cycle outputs numbered, platform-tagged log lines in the terminal:
+
+```
+[UPWORK] [Step 1/5] 🔍 Scanning query: 'Automation' (Batch limit: 10 jobs)...
+[UPWORK] [Step 2/5] 🌐 Received 10 jobs from Upwork GraphQL API
+[UPWORK] [Step 3/5] 🗄️ Checking 10 jobs against 'upwork_jobs' table...
+[UPWORK] [Step 4/5] 💾 ✨ [NEW] Saved to 'upwork_jobs': 21031845... | RAG Chatbot Developer
+[UPWORK] [Step 5/5] 💬 Sent to #upwork with details thread
+[UPWORK] ✅ Cycle complete for 'Automation': 1 new jobs posted to #upwork.
+
+[GURU] [Step 1/5] 🔍 Scanning query: 'Automation' (Batch limit: 10 jobs)...
+[GURU] [Step 2/5] 🌐 Scraped 10 jobs from Guru search
+[GURU] [Step 3/5] 🗄️ Checking 10 jobs against 'guru_jobs' table...
+[GURU] ⏭️ Cycle complete for 'Automation': No new unposted jobs.
+```

@@ -182,7 +182,18 @@ python -c "import db; print(db.get_all_job_counts())"
 
 ---
 
-## 7. Final Checklist Before You Finish
+## 7. Git & Documentation Workflow (Mandatory Before Every Push)
+
+Before running `git push` to GitHub:
+1. 📝 **Update `README.md`**: Document any new platform capabilities, configuration options, timestamp formats, or CLI flags.
+2. 🧠 **Update `brain.md`**: Keep canonical architecture and component status synchronized.
+3. 🤖 **Update `claude.md`**: Ensure platform checklists and blueprints match current patterns.
+4. 🧪 **Validate Python Code**: Run `python -m py_compile` across all files to ensure no syntax errors.
+5. 🚀 **Commit & Push**: Stage changed files, create clean descriptive commits, and push to GitHub (`git push origin main`).
+
+---
+
+## 8. Final Checklist Before You Finish
 
 - [ ] Read `claude.md` + `brain.md` before making edits
 - [ ] No secrets exposed, logged, or committed in `.env`

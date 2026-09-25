@@ -4,7 +4,7 @@ guru/formatter.py — Discord embed and thread formatting for Guru jobs.
 
 from datetime import datetime
 import discord
-from utils.discord_helpers import split_message
+from utils.discord_helpers import parse_posted_time, split_message
 
 GURU_BRAND_COLOR = 0x00A6EB  # Guru Cyan/Blue
 
@@ -22,7 +22,8 @@ def format_guru_job_message(
     description = job.get("description", "")
     posted_time = job.get("posted_time", "Recent")
     quotes_count = job.get("quotes_count", "0")
-    current_time = datetime.now().strftime("%H:%M")
+
+    posted_dt, exact_posted, rel_posted = parse_posted_time(posted_time)
 
     desc_preview = description[:300].strip()
     if len(description) > 300:
@@ -35,10 +36,10 @@ def format_guru_job_message(
         color=GURU_BRAND_COLOR,
     )
 
-    embed.add_field(name="Posted", value=posted_time, inline=True)
+    embed.add_field(name="Exact Posted", value=exact_posted, inline=True)
+    embed.add_field(name="Relative", value=rel_posted, inline=True)
     embed.add_field(name="Budget/Rate", value=budget, inline=True)
     embed.add_field(name="Quotes Received", value=quotes_count, inline=True)
-    embed.add_field(name="Time", value=current_time, inline=True)
 
     if query_label:
         embed.add_field(name="Keyword", value=f"`{query_label}`", inline=True)
@@ -48,7 +49,7 @@ def format_guru_job_message(
 
     footer_text = f"Guru • {query_label}" if query_label else "Guru Job Alerts"
     embed.set_footer(text=footer_text)
-    embed.timestamp = discord.utils.utcnow()
+    embed.timestamp = posted_dt if posted_dt else discord.utils.utcnow()
 
     content = "🔄 **[UPDATED]** This Guru job was updated!" if is_updated else ""
     return content, embed
@@ -66,6 +67,8 @@ def format_guru_thread_details(job: dict) -> str:
     posted_time = job.get("posted_time", "Recent")
     quotes_count = job.get("quotes_count", "0")
 
+    posted_dt, exact_posted, rel_posted = parse_posted_time(posted_time)
+
     lines = [
         "__**Full Job Description**__",
         "",
@@ -73,7 +76,7 @@ def format_guru_thread_details(job: dict) -> str:
         "",
         "__**Job Details**__",
         f"- **Budget:** {budget}",
-        f"- **Posted:** {posted_time}",
+        f"- **Posted Exact:** {exact_posted} ({rel_posted})",
         f"- **Quotes Received:** {quotes_count}",
     ]
 

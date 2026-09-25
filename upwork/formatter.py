@@ -4,7 +4,7 @@ upwork/formatter.py — Discord embed and thread formatting for Upwork jobs.
 
 from datetime import datetime
 import discord
-from utils.discord_helpers import format_relative_time, split_message
+from utils.discord_helpers import format_relative_time, parse_posted_time, split_message
 
 
 def build_job_url(ciphertext: str) -> str:
@@ -36,8 +36,7 @@ def format_job_message(
     description = job.get("description", "")
     experience_level = job.get("experience_level", "Not specified")
 
-    relative = format_relative_time(posted_time)
-    current_time = datetime.now().strftime("%H:%M")
+    posted_dt, exact_posted, rel_posted = parse_posted_time(posted_time)
 
     desc_preview = description[:300].strip()
     if len(description) > 300:
@@ -60,10 +59,10 @@ def format_job_message(
         color=color,
     )
 
-    embed.add_field(name="Posted", value=relative, inline=True)
+    embed.add_field(name="Exact Posted", value=exact_posted, inline=True)
+    embed.add_field(name="Relative", value=rel_posted, inline=True)
     embed.add_field(name="Budget/Rate", value=budget, inline=True)
     embed.add_field(name="Level", value=experience_level, inline=True)
-    embed.add_field(name="Time", value=current_time, inline=True)
 
     if query_label:
         embed.add_field(name="Keyword", value=f"`{query_label}`", inline=True)
@@ -73,7 +72,7 @@ def format_job_message(
 
     footer_text = f"Upwork • {query_label}" if query_label else "Upwork Job Bot"
     embed.set_footer(text=footer_text)
-    embed.timestamp = discord.utils.utcnow()
+    embed.timestamp = posted_dt if posted_dt else discord.utils.utcnow()
 
     content = (
         "🔄 **[UPDATED]** This job has been updated by the client!"
@@ -159,6 +158,10 @@ def format_thread_details(details: dict, job: dict) -> str:
 
     # Section 3: Job Details
     job_lines = []
+    posted_time = job.get("posted_time", "")
+    if posted_time:
+        posted_dt, exact_posted, rel_posted = parse_posted_time(posted_time)
+        job_lines.append(f"- **Posted Exact:** {exact_posted} ({rel_posted})")
     if job_type and job_type != "Not specified":
         job_lines.append(f"- **Type:** {job_type}")
     if budget and budget not in ("Not specified", "Budget not specified"):
