@@ -7,16 +7,17 @@
 
 ## 1. Concept
 
-A modular, multi-platform **Discord bot** system that monitors freelance marketplaces (**Upwork**, **Guru**, and **Freelancer.com**, with planned platforms such as **PeoplePerHour**, etc.) for **new job postings** in real time, de-duplicates jobs via SQLite content hashing, and forwards alerts into **dedicated single channels per platform** (`#upwork`, `#guru`, `#freelancer`) as rich embeds with full job details in auto-created threads.
+A modular, multi-platform **Discord bot** system that monitors freelance marketplaces (**Upwork**, **Guru**, **Freelancer.com**, and **PeoplePerHour**) for **new job postings** in real time, de-duplicates jobs via SQLite content hashing, and forwards alerts into **dedicated single channels per platform** (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`) as rich embeds with full job details in auto-created threads.
 
 ### Key Tenets
-1. **Single Channel Per Platform**: All jobs from a platform (across any tracked search query or keyword) post into a single dedicated channel (`#upwork` for Upwork, `#guru` for Guru, `#freelancer` for Freelancer). Each embed clearly tags the matched keyword.
-2. **Dedicated Database Table Per Platform**: Every platform has its own table in `jobs.db` (`upwork_jobs`, `guru_jobs`, `freelancer_jobs`) to isolate jobs and prevent collisions.
+1. **Single Channel Per Platform**: All jobs from a platform (across any tracked search query or keyword) post into a single dedicated channel (`#upwork` for Upwork, `#guru` for Guru, `#freelancer` for Freelancer, `#peopleperhour` for PeoplePerHour). Each embed clearly tags the matched keyword.
+2. **Dedicated Database Table Per Platform**: Every platform has its own table in `jobs.db` (`upwork_jobs`, `guru_jobs`, `freelancer_jobs`, `peopleperhour_jobs`) to isolate jobs and prevent collisions.
 3. **Independent or Parallel Execution**: Each platform can be run individually (`python main.py --platform <name>`), all together in parallel in one process (`python main.py --all`), or across separate terminals.
 4. **Fast Polling Without Selenium Job Verification**: 
    - Upwork: Uses GraphQL scraper + Turnstile session refresh when tokens expire.
    - Guru: Uses fast HTTP scraping (`curl_cffi` + `BeautifulSoup`) requiring 0 tokens, 0 cookies, and 0 Selenium. Automatically paginates `/d/jobs/pg/{page}/` for large batches (`limit > 20`).
    - Freelancer: Uses high-speed public REST API (`/api/projects/0.1/projects/active/`) ordered by `time_submitted` (newest first). 0 tokens, 0 cookies, 0 Selenium.
+   - PeoplePerHour: Uses direct SSR React state hydration extraction (`window.PPHReact.initialState`) via `curl_cffi` (chrome124) with queries sorted by `latest`. 0 tokens, 0 cookies, 0 Selenium.
 
 ---
 
@@ -32,8 +33,8 @@ main.py (CLI entry point)  [--platform <name> / --all]
    ▼
  bot.setup_hook()
    │  loads platform cogs:
-   │  ├─ upwork / guru / freelancer cmds  → slash commands (/add_tracker, /guru_add_tracker, etc.)
-   │  └─ upwork / guru / freelancer poll  → UpworkPoller / GuruPoller / FreelancerPoller cogs
+   │  ├─ upwork / guru / freelancer / pph cmds  → slash commands (/add_tracker, /pph_add_tracker, etc.)
+   │  └─ upwork / guru / freelancer / pph poll  → Platform Poller cogs
    │
    ▼
  bot.on_ready()
@@ -52,12 +53,19 @@ main.py (CLI entry point)  [--platform <name> / --all]
    │      - Scraper: HTTP + BeautifulSoup (curl_cffi chrome124)
    │      - DB Table: guru_jobs
    │
-   └─ [FREELANCER POLLER]
-          - Channel: #freelancer (auto-created if not found)
-          - Scraper: REST API (curl_cffi chrome124)
-          - DB Table: freelancer_jobs
+   ├─ [FREELANCER POLLER]
+   │      - Channel: #freelancer (auto-created if not found)
+   │      - Scraper: REST API (curl_cffi chrome124)
+   │      - DB Table: freelancer_jobs
+   │      - De-duplication: sha256(title | description | budget)
+   │      - Format: Freelancer blue embed + detail thread
+   │
+   └─ [PEOPLEPERHOUR POLLER]
+          - Channel: #peopleperhour (auto-created if not found)
+          - Scraper: SSR React state scraper (curl_cffi chrome124)
+          - DB Table: peopleperhour_jobs
           - De-duplication: sha256(title | description | budget)
-          - Format: Freelancer blue embed + detail thread
+          - Format: PeoplePerHour orange embed + detail thread
 ```
 
 ---
@@ -75,7 +83,7 @@ E:\Upwork-Discord-Bot\
 │
 ├── db.py                          # 🗄️ MULTI-PLATFORM SQLITE LAYER.
 │                                  #   Manages jobs.db with dedicated tables per platform
-│                                  #   (upwork_jobs, guru_jobs). Handles migration and cleanup.
+│                                  #   (upwork_jobs, guru_jobs, freelancer_jobs, peopleperhour_jobs).
 │
 ├── logger.py                      # 📝 GLOBAL LOGGING. Console formatting + rotating file (logs/bot.log).
 │
@@ -87,7 +95,7 @@ E:\Upwork-Discord-Bot\
 ├── requirements.txt               # 📦 DEPENDENCIES: requests, curl_cffi, discord.py, selenium, bs4.
 ├── brain.md                       # 🧠 CANONICAL ARCHITECTURE & KNOWLEDGE (this file).
 ├── claude.md                      # 🤖 AGENT RULEBOOK & NEW PLATFORM ADDITION BLUEPRINT.
-├── jobs.db                        # 🗄️ SQLITE DATABASE containing platform tables (upwork_jobs, guru_jobs).
+├── jobs.db                        # 🗄️ SQLITE DATABASE containing platform tables (upwork_jobs, guru_jobs, freelancer_jobs, peopleperhour_jobs).
 │
 ├── utils/                         # 🧰 GLOBAL SHARED UTILITIES
 │   ├── __init__.py                #   Exports common utilities.
@@ -123,6 +131,15 @@ E:\Upwork-Discord-Bot\
 │   ├── formatter.py               #   Freelancer embed and thread detail formatter (Blue branding).
 │   └── commands.py                #   Freelancer slash commands (/freelancer_add_tracker, etc.).
 │
+├── peopleperhour/                 # 🏢 PEOPLEPERHOUR PLATFORM PACKAGE
+│   ├── __init__.py                #   Exports PeoplePerHourScraper, PeoplePerHourPoller, setup_peopleperhour.
+│   ├── config.py                  #   PeoplePerHour configs, channel settings, tracker mutator helpers.
+│   ├── config.json                #   PeoplePerHour tracked queries & dedicated single channel (#peopleperhour).
+│   ├── scraper.py                 #   PeoplePerHour SSR React state scraper (curl_cffi chrome124).
+│   ├── poller.py                  #   PeoplePerHour polling loop; routes to #peopleperhour and peopleperhour_jobs table.
+│   ├── formatter.py               #   PeoplePerHour embed and thread detail formatter (Orange branding).
+│   └── commands.py                #   PeoplePerHour slash commands (/pph_add_tracker, etc.).
+│
 ├── cogs/                          # 🔄 BACKWARD-COMPATIBLE COG SHIMS
 │   ├── poller.py                  #   Re-exports from upwork.poller.
 │   └── tracker_commands.py        #   Re-exports from upwork.commands.
@@ -141,6 +158,7 @@ Each platform routes all search queries into its single dedicated channel:
 - Upwork: `#upwork`
 - Guru: `#guru`
 - Freelancer: `#freelancer`
+- PeoplePerHour: `#peopleperhour`
 When a poller starts, `get_or_create_platform_channel()` checks if the channel exists. If not, it creates it automatically in the Discord guild.
 
 ### Database Schema (`{platform}_jobs`)
@@ -178,15 +196,23 @@ CREATE TABLE IF NOT EXISTS {platform}_jobs (
    python main.py --platform freelancer
    ```
 
-4. **Run All Platforms (Upwork + Guru + Freelancer)**:
+4. **Run PeoplePerHour Only**:
+   ```powershell
+   python main.py --platform peopleperhour
+   ```
+
+5. **Run All Platforms (Upwork + Guru + Freelancer + PeoplePerHour)**:
    ```powershell
    python main.py --all
    ```
 
-5. **Run in Separate Terminals**:
+6. **Run in Separate Terminals**:
    - Terminal 1: `python main.py --platform upwork`
    - Terminal 2: `python main.py --platform guru`
    - Terminal 3: `python main.py --platform freelancer`
+   - Terminal 4: `python main.py --platform peopleperhour`
+
+---
 
 ---
 

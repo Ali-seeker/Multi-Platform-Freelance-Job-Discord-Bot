@@ -1,0 +1,13 @@
+{
+    "channel_name": "peopleperhour",
+    "channel_id": "",
+    "tracked_queries": [
+        {
+            "query": "automation",
+            "url": "https://www.peopleperhour.com/freelance-jobs?q=automation&sort=latest",
+            "label": "Automation"
+        }
+    ],
+    "fetch_interval": 15,
+    "jobs_per_page": 20
+}
