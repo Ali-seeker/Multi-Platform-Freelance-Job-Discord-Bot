@@ -63,19 +63,28 @@ def parse_posted_time(raw_time: str) -> tuple[datetime | None, str, str]:
     if not raw_time:
         return None, "Unknown", "Unknown"
 
-    raw = raw_time.strip()
+    raw = str(raw_time).strip()
     dt = None
 
-    # 1. Try parsing ISO 8601 (Upwork format: 2026-09-24T18:07:56.140Z)
+    # 1. Try parsing numeric UNIX timestamp (Freelancer format: 1790323624)
     try:
-        clean = raw.replace("Z", "+00:00")
-        dt = datetime.fromisoformat(clean)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        else:
-            dt = dt.astimezone(timezone.utc)
+        val = float(raw)
+        if val > 100000000:  # Valid epoch
+            dt = datetime.fromtimestamp(val, tz=timezone.utc)
     except (ValueError, TypeError):
         pass
+
+    # 2. Try parsing ISO 8601 (Upwork format: 2026-09-24T18:07:56.140Z)
+    if not dt:
+        try:
+            clean = raw.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(clean)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+        except (ValueError, TypeError):
+            pass
 
     # 2. Try parsing relative time strings (Guru format: '13 hrs ago', '25 mins ago', 'yesterday')
     if not dt:

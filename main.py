@@ -59,6 +59,10 @@ AVAILABLE_PLATFORMS = {
         "name": "Guru",
         "setup": lambda bot: _setup_guru_platform(bot),
     },
+    "freelancer": {
+        "name": "Freelancer",
+        "setup": lambda bot: _setup_freelancer_platform(bot),
+    },
 }
 
 
@@ -72,6 +76,12 @@ async def _setup_guru_platform(bot: commands.Bot):
     """Sets up Guru platform components."""
     from guru import setup_guru
     await setup_guru(bot)
+
+
+async def _setup_freelancer_platform(bot: commands.Bot):
+    """Sets up Freelancer.com platform components."""
+    from freelancer import setup_freelancer
+    await setup_freelancer(bot)
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +178,7 @@ def main():
         "-p",
         type=str,
         default="upwork",
-        help="Platform to run: 'upwork', 'guru', 'peopleperhour', or 'all'. Default: 'upwork'",
+        help="Platform to run: 'upwork', 'guru', 'freelancer', or 'all'. Default: 'upwork'",
     )
     parser.add_argument(
         "--all",

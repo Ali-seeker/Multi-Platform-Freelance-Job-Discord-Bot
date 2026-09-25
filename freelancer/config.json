@@ -1,10 +1,10 @@
 {
-    "channel_name": "upwork",
-    "channel_id": "1552924263022075904",
+    "channel_name": "freelancer",
+    "channel_id": "",
     "tracked_queries": [
         {
             "query": "automation",
-            "url": "https://www.upwork.com/nx/search/jobs/?q=automation&sort=recency",
+            "url": "https://www.freelancer.com/jobs/?keyword=automation",
             "label": "Automation"
         }
     ],

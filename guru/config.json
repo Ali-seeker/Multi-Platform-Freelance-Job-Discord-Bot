@@ -9,5 +9,5 @@
         }
     ],
     "fetch_interval": 10,
-    "jobs_per_page": 50
+    "jobs_per_page": 20
 }
