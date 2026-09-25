@@ -17,7 +17,7 @@ A modular, multi-platform **Discord bot** system that monitors freelance marketp
    - Upwork: Uses GraphQL scraper + Turnstile session refresh when tokens expire.
    - Guru: Uses fast HTTP scraping (`curl_cffi` + `BeautifulSoup`) requiring 0 tokens, 0 cookies, and 0 Selenium. Automatically paginates `/d/jobs/pg/{page}/` for large batches (`limit > 20`).
    - Freelancer: Uses high-speed public REST API (`/api/projects/0.1/projects/active/`) ordered by `time_submitted` (newest first). 0 tokens, 0 cookies, 0 Selenium.
-   - PeoplePerHour: Uses direct SSR React state hydration extraction (`window.PPHReact.initialState`) via `curl_cffi` (chrome124) with queries sorted by `latest`. 0 tokens, 0 cookies, 0 Selenium.
+   - PeoplePerHour: Uses direct SSR React state hydration extraction (`window.PPHReact.initialState`) via `curl_cffi` (chrome124) with keywords mapped to `/freelance-{slug}-jobs?sort=latest`. 0 tokens, 0 cookies, 0 Selenium.
 
 ---
 

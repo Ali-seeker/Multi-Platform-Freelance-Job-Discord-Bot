@@ -48,13 +48,30 @@ class PeoplePerHourScraper:
         Returns:
             List of standardized job dictionaries.
         """
-        encoded_query = urllib.parse.quote(search_query)
+        # PeoplePerHour routes keyword searches to slug URLs: /freelance-{slug}-jobs
+        # e.g., 'automation' -> '/freelance-automation-jobs?sort=latest'
+        raw_query = search_query.strip()
+        if raw_query.startswith("http://") or raw_query.startswith("https://"):
+            base_url = raw_query.split("?")[0]
+            parsed = urllib.parse.urlparse(raw_query)
+            params = urllib.parse.parse_qs(parsed.query)
+            q_val = params.get("q", [None])[0] or params.get("query", [None])[0]
+            if q_val and "freelance-jobs" in base_url:
+                slug = re.sub(r"[^a-zA-Z0-9]+", "-", q_val.strip().lower()).strip("-")
+                base_url = f"{PPH_BASE_URL}/freelance-{slug}-jobs"
+        else:
+            slug = re.sub(r"[^a-zA-Z0-9]+", "-", raw_query.lower()).strip("-")
+            if slug:
+                base_url = f"{PPH_BASE_URL}/freelance-{slug}-jobs"
+            else:
+                base_url = f"{PPH_BASE_URL}/freelance-jobs"
+
         all_jobs = []
         page = 1
         max_pages = max(1, (limit + 19) // 20)
 
         while page <= max_pages and len(all_jobs) < limit:
-            search_url = f"{PPH_BASE_URL}/freelance-jobs?q={encoded_query}&sort=latest&page={page}"
+            search_url = f"{base_url}?sort=latest&page={page}"
 
             max_retries = 3
             html = ""

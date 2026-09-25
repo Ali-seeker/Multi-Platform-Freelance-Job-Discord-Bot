@@ -85,7 +85,9 @@ class PeoplePerHourPoller(commands.Cog):
                 break
 
             search_query = query_config.get("query", "")
-            url_source = query_config.get("url", f"https://www.peopleperhour.com/freelance-jobs?q={search_query}&sort=latest")
+            slug = re.sub(r"[^a-zA-Z0-9]+", "-", search_query.strip().lower()).strip("-")
+            default_url = f"https://www.peopleperhour.com/freelance-{slug}-jobs?sort=latest" if slug else "https://www.peopleperhour.com/freelance-jobs?sort=latest"
+            url_source = query_config.get("url", default_url)
             label = query_config.get("label", search_query or "PeoplePerHour")
 
             logger.info(f"[PEOPLEPERHOUR] [Step 1/5] 🔍 Scanning query: '{label}' (Batch limit: {JOBS_PER_PAGE} jobs)...")
