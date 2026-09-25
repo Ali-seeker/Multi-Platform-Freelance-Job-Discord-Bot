@@ -5,6 +5,7 @@ Sends all scraped jobs to a single dedicated #peopleperhour channel.
 
 import asyncio
 import hashlib
+import re
 import discord
 from discord.ext import commands, tasks
 
@@ -209,6 +210,10 @@ class PeoplePerHourPoller(commands.Cog):
     @poll_pph.before_loop
     async def before_poll(self):
         await self.bot.wait_until_ready()
+
+    @poll_pph.error
+    async def on_poll_pph_error(self, error):
+        logger.error(f"[PEOPLEPERHOUR] 💥 Unhandled error in poll_pph loop: {error}", exc_info=True)
 
 
 async def setup(bot: commands.Bot, scraper=None):

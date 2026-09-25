@@ -3,6 +3,7 @@ peopleperhour/config.py — Configuration loader and query constants for the Peo
 """
 
 import os
+import re
 import json
 import urllib.parse
 from dotenv import load_dotenv
@@ -58,8 +59,8 @@ for entry in raw_queries:
         if not label:
             label = query or "PeoplePerHour"
         if not url and query:
-            encoded = urllib.parse.quote(query)
-            url = f"https://www.peopleperhour.com/freelance-jobs?q={encoded}&sort=latest"
+            slug = re.sub(r"[^a-zA-Z0-9]+", "-", query.strip().lower()).strip("-")
+            url = f"https://www.peopleperhour.com/freelance-{slug}-jobs?sort=latest" if slug else "https://www.peopleperhour.com/freelance-jobs?sort=latest"
         TRACKED_QUERIES.append({"query": query, "url": url, "label": label})
 
 
@@ -96,8 +97,8 @@ def add_new_tracker(keyword_or_url: str, label: str = ""):
     if not label:
         label = parsed_query
 
-    encoded = urllib.parse.quote(parsed_query)
-    pph_url = f"https://www.peopleperhour.com/freelance-jobs?q={encoded}&sort=latest"
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", parsed_query.strip().lower()).strip("-")
+    pph_url = f"https://www.peopleperhour.com/freelance-{slug}-jobs?sort=latest" if slug else "https://www.peopleperhour.com/freelance-jobs?sort=latest"
 
     for item in TRACKED_QUERIES:
         if item.get("label", "").lower() == label.lower():
