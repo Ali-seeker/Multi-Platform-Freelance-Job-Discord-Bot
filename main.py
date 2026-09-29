@@ -75,6 +75,10 @@ AVAILABLE_PLATFORMS = {
         "name": "Facebook",
         "setup": lambda bot: _setup_facebook_platform(bot),
     },
+    "99freelas": {
+        "name": "99freelas",
+        "setup": lambda bot: _setup_99freelas_platform(bot),
+    },
 }
 
 
@@ -112,6 +116,13 @@ async def _setup_facebook_platform(bot: commands.Bot):
     """Sets up Facebook platform components."""
     from facebook import setup_facebook
     await setup_facebook(bot)
+
+
+async def _setup_99freelas_platform(bot: commands.Bot):
+    """Sets up 99freelas platform components."""
+    import importlib
+    freelas99 = importlib.import_module("99freelas")
+    await freelas99.setup_99freelas(bot)
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +219,7 @@ def main():
         "-p",
         type=str,
         default="upwork",
-        help="Platform to run: 'upwork', 'guru', 'freelancer', 'peopleperhour', 'truelancer', 'facebook', or 'all'. Default: 'upwork'",
+        help="Platform to run: 'upwork', 'guru', 'freelancer', 'peopleperhour', 'truelancer', 'facebook', '99freelas', or 'all'. Default: 'upwork'",
     )
     parser.add_argument(
         "--all",

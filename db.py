@@ -53,7 +53,7 @@ def init_db(platform: str = "upwork") -> None:
     try:
         # Create platform table if it doesn't exist
         conn.execute(f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
+            CREATE TABLE IF NOT EXISTS [{table_name}] (
                 job_id       TEXT,
                 url_source   TEXT,
                 title        TEXT NOT NULL,
@@ -68,11 +68,11 @@ def init_db(platform: str = "upwork") -> None:
         """)
 
         # Check existing columns in the table (for column migrations)
-        cursor = conn.execute(f"PRAGMA table_info({table_name})")
+        cursor = conn.execute(f"PRAGMA table_info([{table_name}])")
         columns = [row["name"] for row in cursor.fetchall()]
         if columns and "content_hash" not in columns:
             try:
-                conn.execute(f"ALTER TABLE {table_name} ADD COLUMN content_hash TEXT DEFAULT ''")
+                conn.execute(f"ALTER TABLE [{table_name}] ADD COLUMN content_hash TEXT DEFAULT ''")
                 logger.info(f"Added content_hash column to {table_name}.")
             except Exception as e:
                 logger.error(f"Migration error for {table_name} content_hash: {e}")
@@ -108,7 +108,7 @@ def save_job(job_dict: dict, url_source: str, content_hash: str = "", platform: 
     try:
         conn.execute(
             f"""
-            INSERT OR REPLACE INTO {table_name} (
+            INSERT OR REPLACE INTO [{table_name}] (
                 job_id, url_source, title, description, budget, skills, posted_time, fetched_at, content_hash
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -138,7 +138,7 @@ def job_exists(job_id: str, url_source: str, platform: str = "upwork") -> bool:
     conn = _get_connection()
     try:
         row = conn.execute(
-            f"SELECT 1 FROM {table_name} WHERE job_id = ? AND url_source = ?",
+            f"SELECT 1 FROM [{table_name}] WHERE job_id = ? AND url_source = ?",
             (str(job_id), url_source),
         ).fetchone()
         return row is not None
@@ -155,7 +155,7 @@ def get_job_hash(job_id: str, url_source: str, platform: str = "upwork") -> str 
     conn = _get_connection()
     try:
         row = conn.execute(
-            f"SELECT content_hash FROM {table_name} WHERE job_id = ? AND url_source = ?",
+            f"SELECT content_hash FROM [{table_name}] WHERE job_id = ? AND url_source = ?",
             (str(job_id), url_source),
         ).fetchone()
         if row:
@@ -170,7 +170,7 @@ def get_job_count(platform: str = "upwork") -> int:
     table_name = get_platform_table(platform)
     conn = _get_connection()
     try:
-        row = conn.execute(f"SELECT COUNT(*) as cnt FROM {table_name}").fetchone()
+        row = conn.execute(f"SELECT COUNT(*) as cnt FROM [{table_name}]").fetchone()
         return row["cnt"] if row else 0
     except sqlite3.OperationalError:
         return 0
@@ -187,7 +187,7 @@ def cleanup_old_jobs(days: int = 14, platform: str = "upwork") -> int:
     conn = _get_connection()
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-        cursor = conn.execute(f"DELETE FROM {table_name} WHERE fetched_at < ?", (cutoff,))
+        cursor = conn.execute(f"DELETE FROM [{table_name}] WHERE fetched_at < ?", (cutoff,))
         conn.commit()
         deleted = cursor.rowcount
         if deleted > 0:
@@ -208,7 +208,7 @@ def get_all_job_counts() -> dict[str, int]:
         counts = {}
         for tbl in tables:
             platform = tbl[:-5]  # strip '_jobs'
-            row = conn.execute(f"SELECT COUNT(*) as cnt FROM {tbl}").fetchone()
+            row = conn.execute(f"SELECT COUNT(*) as cnt FROM [{tbl}]").fetchone()
             counts[platform] = row["cnt"] if row else 0
         return counts
     finally:

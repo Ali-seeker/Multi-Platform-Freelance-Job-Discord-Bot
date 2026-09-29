@@ -8,7 +8,7 @@
         }
     ],
     "tracked_groups": [],
-    "fetch_interval": 15,
+    "fetch_interval": 30,
     "email_host": "imap.gmail.com",
     "email_port": 993,
     "email_folder": "INBOX",
