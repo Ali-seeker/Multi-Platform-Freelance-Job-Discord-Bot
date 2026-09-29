@@ -116,6 +116,11 @@ def parse_notification_subject(subject: str) -> tuple[str, str]:
     if m2:
         return m2.group(2).strip(), m2.group(1).strip()
 
+    # Pattern 3: [Group Name] has a new post
+    m3 = re.search(r"^(.+?)\s+(?:has\s+(?:a|\d+)\s+new\s+posts?|added\s+a\s+new\s+post)", clean_sub, re.IGNORECASE)
+    if m3:
+        return "Facebook Member", m3.group(1).strip()
+
     return "Facebook Member", "Facebook Group"
 
 
@@ -234,7 +239,11 @@ class FacebookEmailListener:
         date_hdr = msg.get("Date", "")
 
         # Only process group post notifications
-        if not any(kw in subject.lower() for kw in ["posted in", "shared a post in", "new post in"]):
+        group_keywords = [
+            "posted in", "shared a post in", "new post in",
+            "has a new post", "has new posts", "added a new post", "new post"
+        ]
+        if not any(kw in subject.lower() for kw in group_keywords):
             logger.debug(f"[FACEBOOK] Ignoring non-group email subject: {subject}")
             return None
 

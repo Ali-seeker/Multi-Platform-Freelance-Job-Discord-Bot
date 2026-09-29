@@ -166,9 +166,10 @@ E:\Upwork-Discord-Bot\
 │   └── commands.py                #   Truelancer slash commands (/truelancer_add_tracker, etc.).
 │
 ├── facebook/                      # 🏢 FACEBOOK PLATFORM PACKAGE
-│   ├── __init__.py                #   Exports FacebookEmailListener, FacebookPoller, setup_facebook.
+│   ├── __init__.py                #   Exports FacebookNotificationScraper, FacebookPoller, setup_facebook.
 │   ├── config.py                  #   Facebook configs, channel settings, tracker mutator helpers.
 │   ├── config.json                #   Facebook tracked queries & dedicated single channel (#facebook).
+│   ├── scraper.py                 #   Direct HTTP notification scraper (curl_cffi chrome124 with c_user & xs).
 │   ├── email_listener.py          #   IMAP email notification listener & parser (imaplib + BeautifulSoup).
 │   ├── poller.py                  #   Facebook polling loop; routes to #facebook and facebook_jobs table.
 │   ├── formatter.py               #   Facebook embed and thread detail formatter (Facebook Blue branding).

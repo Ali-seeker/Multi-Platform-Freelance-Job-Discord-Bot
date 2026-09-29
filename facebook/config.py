@@ -41,7 +41,12 @@ CHANNEL_NAME = _config_data.get("channel_name", "facebook")
 CHANNEL_ID = _config_data.get("channel_id", "")
 POLL_INTERVAL_SECONDS = _config_data.get("fetch_interval", 15)
 
-# Email Connection Settings from environment or config.json
+# Facebook Session Cookies for Direct HTTP Scraper (Method 1)
+FB_C_USER = os.getenv("FB_C_USER", "").strip()
+FB_XS = os.getenv("FB_XS", "").strip()
+FB_COOKIES = os.getenv("FB_COOKIES", "").strip()
+
+# Email Connection Settings (Optional / Alternative)
 FB_EMAIL_USER = os.getenv("FB_EMAIL_USER", os.getenv("FB_EMAIL_ACCOUNT", "")).strip()
 FB_EMAIL_PASSWORD = os.getenv("FB_EMAIL_PASSWORD", os.getenv("FB_EMAIL_APP_PASSWORD", "")).strip()
 FB_EMAIL_HOST = os.getenv("FB_EMAIL_HOST", _config_data.get("email_host", "imap.gmail.com")).strip()

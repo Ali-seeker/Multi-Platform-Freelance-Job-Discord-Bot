@@ -13,7 +13,10 @@ from facebook.config import (
     CHANNEL_ID,
     set_channel_id,
     FB_EMAIL_USER,
+    FB_C_USER,
+    FB_XS,
 )
+from facebook.scraper import FacebookNotificationScraper
 from facebook.email_listener import FacebookEmailListener
 from facebook.formatter import (
     format_facebook_job_message,
@@ -28,8 +31,14 @@ logger = get_logger(__name__)
 
 
 class FacebookPoller(commands.Cog):
-    def __init__(self, bot: commands.Bot, listener: FacebookEmailListener = None):
+    def __init__(
+        self,
+        bot: commands.Bot,
+        scraper: FacebookNotificationScraper = None,
+        listener: FacebookEmailListener = None,
+    ):
         self.bot = bot
+        self.scraper = scraper or FacebookNotificationScraper()
         self.listener = listener or FacebookEmailListener()
         self.channel: discord.TextChannel | None = None
         self._warned_unconfigured = False
@@ -65,13 +74,16 @@ class FacebookPoller(commands.Cog):
     @tasks.loop(seconds=POLL_INTERVAL_SECONDS)
     async def poll_facebook(self):
         """
-        Background task that checks the email inbox for new Facebook group posts.
+        Background task that checks Facebook notifications for new group posts.
         Sends all received posts into the single #facebook channel.
         """
-        if not self.listener.is_configured():
+        use_scraper = self.scraper.is_configured()
+        use_email = self.listener.is_configured()
+
+        if not use_scraper and not use_email:
             if not self._warned_unconfigured:
                 logger.warning(
-                    "[FACEBOOK] ⚠️ FB_EMAIL_USER and FB_EMAIL_PASSWORD are not configured in .env. Waiting for configuration..."
+                    "[FACEBOOK] ⚠️ Facebook cookies (FB_C_USER, FB_XS) are not configured in .env. Waiting for configuration..."
                 )
                 self._warned_unconfigured = True
             return
@@ -82,20 +94,27 @@ class FacebookPoller(commands.Cog):
             global_state["errors_last_hour"] += 1
             return
 
-        logger.info("[FACEBOOK] [Step 1/5] 📬 Checking inbox for new Facebook group notification emails...")
-
-        try:
-            posts = await asyncio.to_thread(self.listener.fetch_new_posts)
-        except Exception as e:
-            logger.error(f"[FACEBOOK] Error fetching notification emails: {e}")
-            global_state["errors_last_hour"] += 1
-            return
+        posts = []
+        if use_scraper:
+            logger.info("[FACEBOOK] [Step 1/5] 🔍 Checking Facebook notifications feed via session cookies...")
+            try:
+                posts = await asyncio.to_thread(self.scraper.fetch_notifications)
+            except Exception as e:
+                logger.error(f"[FACEBOOK] Error scraping notifications feed: {e}")
+                global_state["errors_last_hour"] += 1
+        elif use_email:
+            logger.info("[FACEBOOK] [Step 1/5] 📬 Checking inbox for new Facebook group notification emails...")
+            try:
+                posts = await asyncio.to_thread(self.listener.fetch_new_posts)
+            except Exception as e:
+                logger.error(f"[FACEBOOK] Error fetching notification emails: {e}")
+                global_state["errors_last_hour"] += 1
 
         if not posts:
-            logger.info("[FACEBOOK] [Step 2/5] ℹ️ No new unread Facebook notification emails found.")
+            logger.info("[FACEBOOK] [Step 2/5] ℹ️ No new unposted Facebook group notifications found.")
             return
 
-        logger.info(f"[FACEBOOK] [Step 2/5] 🌐 Received {len(posts)} Facebook group post(s) from emails.")
+        logger.info(f"[FACEBOOK] [Step 2/5] 🌐 Received {len(posts)} Facebook group post(s).")
         logger.info(f"[FACEBOOK] [Step 3/5] 🗄️ Checking {len(posts)} posts against 'facebook_jobs' table...")
 
         total_new_count = 0
