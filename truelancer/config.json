@@ -1,0 +1,13 @@
+{
+    "channel_name": "truelancer",
+    "channel_id": "1554001874187722812",
+    "tracked_queries": [
+        {
+            "query": "automation",
+            "url": "https://www.truelancer.com/freelance-jobs?q=automation",
+            "label": "Automation"
+        }
+    ],
+    "fetch_interval": 15,
+    "jobs_per_page": 20
+}

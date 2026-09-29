@@ -1,19 +1,20 @@
 # Multi-Platform Freelance Job Discord Bot
 
-An intelligent, modular, and fully automated Discord bot system that monitors freelance marketplaces (**Upwork**, **Guru**, **Freelancer.com**, and **PeoplePerHour**) in real-time, de-duplicates job postings via SQLite content hashing, and forwards alerts into **dedicated single channels per platform** (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`) with rich embeds and detailed auto-created discussion threads.
+An intelligent, modular, and fully automated Discord bot system that monitors freelance marketplaces (**Upwork**, **Guru**, **Freelancer.com**, **PeoplePerHour**, and **Truelancer**) in real-time, de-duplicates job postings via SQLite content hashing, and forwards alerts into **dedicated single channels per platform** (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`) with rich embeds and detailed auto-created discussion threads.
 
 ---
 
 ## 🌟 Key Features
 
-- **Multi-Platform Architecture:** Modular design where each platform is an isolated package (`upwork/`, `guru/`, `freelancer/`, `peopleperhour/`) with its own scraper, poller, formatter, and configuration.
-- **Dedicated Single Channels:** All jobs for a platform (across any tracked search query or keyword) are sent to a single dedicated channel (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`). The channel is automatically created in your Discord server if it does not already exist.
-- **Isolated SQLite Storage:** Jobs are stored in platform-specific tables (`upwork_jobs`, `guru_jobs`, `freelancer_jobs`, `peopleperhour_jobs`) in `jobs.db` using SHA-256 content hashes (`title|description|budget`) to prevent duplicate alerts.
+- **Multi-Platform Architecture:** Modular design where each platform is an isolated package (`upwork/`, `guru/`, `freelancer/`, `peopleperhour/`, `truelancer/`) with its own scraper, poller, formatter, and configuration.
+- **Dedicated Single Channels:** All jobs for a platform (across any tracked search query or keyword) are sent to a single dedicated channel (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`). The channel is automatically created in your Discord server if it does not already exist.
+- **Isolated SQLite Storage:** Jobs are stored in platform-specific tables (`upwork_jobs`, `guru_jobs`, `freelancer_jobs`, `peopleperhour_jobs`, `truelancer_jobs`) in `jobs.db` using SHA-256 content hashes (`title|description|budget`) to prevent duplicate alerts.
 - **Fast, Lightweight Polling:**
   - **Upwork:** GraphQL search API with automatic headless Selenium visitor token refresh when expired (401/403). Private job checking with Selenium has been removed for blazing-fast cycles.
   - **Guru:** Fast public HTTP scraping (`curl_cffi` + `BeautifulSoup`) requiring zero tokens, zero cookies, and zero Selenium. Supports multi-page pagination when `jobs_per_page > 20`.
   - **Freelancer.com:** High-speed REST API client querying active projects ordered by `time_submitted` (newest first). Zero tokens, zero cookies, zero Selenium.
   - **PeoplePerHour:** Direct SSR React state extraction (`window.PPHReact.initialState`) via `curl_cffi` (chrome124) with zero tokens, zero cookies, and zero Selenium. Automatically routes keyword searches to PeoplePerHour's `/freelance-{slug}-jobs?sort=latest` with multi-page pagination.
+  - **Truelancer:** Direct Next.js SSR structured state extraction (`__NEXT_DATA__`) via `curl_cffi` (chrome124) with zero tokens, zero cookies, and zero Selenium. Provides exact ISO UTC timestamps and auto-pagination (`page={page}&q={query}`).
 - **Flexible Execution Modes:** Run a single platform, run all platforms together in a single process, or run platforms concurrently in separate terminals.
 - **Interactive Discussion Threads:** Creates a thread under each posted job with full client statistics, budget information, full description, and direct apply links.
 
@@ -24,7 +25,7 @@ An intelligent, modular, and fully automated Discord bot system that monitors fr
 ```
 ├── main.py                        # 🚀 Multi-platform CLI runner
 ├── discord_bot.py                 # 🔄 Backward-compatible entry point
-├── db.py                          # 🗄️ Multi-platform SQLite database (upwork_jobs, guru_jobs, freelancer_jobs, peopleperhour_jobs)
+├── db.py                          # 🗄️ Multi-platform SQLite database (upwork_jobs, guru_jobs, freelancer_jobs, peopleperhour_jobs, truelancer_jobs)
 ├── logger.py                      # 📝 Global logging setup
 ├── monitor.py                     # 📊 Status dashboard (:5000/status) with port collision fallback
 ├── requirements.txt               # 📦 Project dependencies
@@ -61,13 +62,21 @@ An intelligent, modular, and fully automated Discord bot system that monitors fr
 │   ├── formatter.py               #   Freelancer rich embed (Blue) and thread formatter
 │   └── commands.py                #   Freelancer slash commands (/freelancer_add_tracker, etc.)
 │
-└── peopleperhour/                 # 🏢 PeoplePerHour platform package
-    ├── config.json                #   PeoplePerHour tracked queries & channel settings
-    ├── config.py                  #   PeoplePerHour configuration loader
-    ├── scraper.py                 #   SSR React state scraper (curl_cffi)
-    ├── poller.py                  #   PeoplePerHour polling loop (posts to #peopleperhour)
-    ├── formatter.py               #   PeoplePerHour rich embed (Orange) and thread formatter
-    └── commands.py                #   PeoplePerHour slash commands (/pph_add_tracker, etc.)
+├── peopleperhour/                 # 🏢 PeoplePerHour platform package
+│   ├── config.json                #   PeoplePerHour tracked queries & channel settings
+│   ├── config.py                  #   PeoplePerHour configuration loader
+│   ├── scraper.py                 #   SSR React state scraper (curl_cffi)
+│   ├── poller.py                  #   PeoplePerHour polling loop (posts to #peopleperhour)
+│   ├── formatter.py               #   PeoplePerHour rich embed (Orange) and thread formatter
+│   └── commands.py                #   PeoplePerHour slash commands (/pph_add_tracker, etc.)
+│
+└── truelancer/                    # 🏢 Truelancer platform package
+    ├── config.json                #   Truelancer tracked queries & channel settings
+    ├── config.py                  #   Truelancer configuration loader
+    ├── scraper.py                 #   Next.js __NEXT_DATA__ scraper (curl_cffi)
+    ├── poller.py                  #   Truelancer polling loop (posts to #truelancer)
+    ├── formatter.py               #   Truelancer rich embed (Sky Blue) and thread formatter
+    └── commands.py                #   Truelancer slash commands (/truelancer_add_tracker, etc.)
 ```
 
 ---
@@ -117,16 +126,22 @@ python main.py --platform freelancer
 python main.py --platform peopleperhour
 ```
 
-### Option 5: Run All Platforms in One Process
+### Option 5: Run Truelancer Only
+```powershell
+python main.py --platform truelancer
+```
+
+### Option 6: Run All Platforms in One Process
 ```powershell
 python main.py --all
 ```
 
-### Option 6: Run in Separate Terminals (Parallel)
+### Option 7: Run in Separate Terminals (Parallel)
 - **Terminal 1:** `python main.py --platform upwork`
 - **Terminal 2:** `python main.py --platform guru`
 - **Terminal 3:** `python main.py --platform freelancer`
 - **Terminal 4:** `python main.py --platform peopleperhour`
+- **Terminal 5:** `python main.py --platform truelancer`
 
 ---
 
@@ -161,6 +176,7 @@ All platforms poll the freshest, most recently posted jobs first:
 - **Guru:** Search results are ordered by `Newest` by default.
 - **Freelancer.com:** REST API queries are ordered by `sort_field=time_submitted` (newest first).
 - **PeoplePerHour:** Search requests are ordered by `sort=latest` (newest first).
+- **Truelancer:** Search queries fetch active open jobs ordered by newest published first.
 
 When jobs are sent to Discord:
 1. **Dynamic Discord Timestamps:** Parsed timestamps are rendered using Discord markdown `<t:UNIX:f>` (exact date & time) and `<t:UNIX:R>` (dynamic relative time like `5 minutes ago`), automatically localized to the viewer's device timezone.
@@ -199,4 +215,11 @@ Every polling cycle outputs numbered, platform-tagged log lines in the terminal:
 [PEOPLEPERHOUR] [Step 4/5] 💾 ✨ [NEW] Saved to 'peopleperhour_jobs': 3824109 | Build an Automation Tool
 [PEOPLEPERHOUR] [Step 5/5] 💬 Sent to #peopleperhour with details thread
 [PEOPLEPERHOUR] ✅ Cycle complete for 'automation': 1 new jobs posted to #peopleperhour.
+
+[TRUELANCER] [Step 1/5] 🔍 Scanning query: 'Automation' (Batch limit: 15 jobs)...
+[TRUELANCER] [Step 2/5] 🌐 Received 15 jobs from Truelancer
+[TRUELANCER] [Step 3/5] 🗄️ Checking 15 jobs against 'truelancer_jobs' table...
+[TRUELANCER] [Step 4/5] 💾 ✨ [NEW] Saved to 'truelancer_jobs': 659774 | AI Powered Lead Generation
+[TRUELANCER] [Step 5/5] 💬 Sent to #truelancer with details thread
+[TRUELANCER] ✅ Cycle complete for 'Automation': 1 new jobs posted to #truelancer.
 ```
