@@ -1,0 +1,16 @@
+{
+    "channel_name": "facebook",
+    "channel_id": "",
+    "tracked_queries": [
+        {
+            "query": "all",
+            "label": "All Posts"
+        }
+    ],
+    "tracked_groups": [],
+    "fetch_interval": 15,
+    "email_host": "imap.gmail.com",
+    "email_port": 993,
+    "email_folder": "INBOX",
+    "mark_as_read": true
+}

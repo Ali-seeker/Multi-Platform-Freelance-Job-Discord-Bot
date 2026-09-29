@@ -1,20 +1,21 @@
 # Multi-Platform Freelance Job Discord Bot
 
-An intelligent, modular, and fully automated Discord bot system that monitors freelance marketplaces (**Upwork**, **Guru**, **Freelancer.com**, **PeoplePerHour**, and **Truelancer**) in real-time, de-duplicates job postings via SQLite content hashing, and forwards alerts into **dedicated single channels per platform** (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`) with rich embeds and detailed auto-created discussion threads.
+An intelligent, modular, and fully automated Discord bot system that monitors freelance marketplaces and work communities (**Upwork**, **Guru**, **Freelancer.com**, **PeoplePerHour**, **Truelancer**, and **Facebook Groups**) in real-time, de-duplicates job postings via SQLite content hashing, and forwards alerts into **dedicated single channels per platform** (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`, `#facebook`) with rich embeds and detailed auto-created discussion threads.
 
 ---
 
 ## 🌟 Key Features
 
-- **Multi-Platform Architecture:** Modular design where each platform is an isolated package (`upwork/`, `guru/`, `freelancer/`, `peopleperhour/`, `truelancer/`) with its own scraper, poller, formatter, and configuration.
-- **Dedicated Single Channels:** All jobs for a platform (across any tracked search query or keyword) are sent to a single dedicated channel (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`). The channel is automatically created in your Discord server if it does not already exist.
-- **Isolated SQLite Storage:** Jobs are stored in platform-specific tables (`upwork_jobs`, `guru_jobs`, `freelancer_jobs`, `peopleperhour_jobs`, `truelancer_jobs`) in `jobs.db` using SHA-256 content hashes (`title|description|budget`) to prevent duplicate alerts.
+- **Multi-Platform Architecture:** Modular design where each platform is an isolated package (`upwork/`, `guru/`, `freelancer/`, `peopleperhour/`, `truelancer/`, `facebook/`) with its own scraper/listener, poller, formatter, and configuration.
+- **Dedicated Single Channels:** All jobs for a platform (across any tracked search query or keyword) are sent to a single dedicated channel (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`, `#facebook`). The channel is automatically created in your Discord server if it does not already exist.
+- **Isolated SQLite Storage:** Jobs are stored in platform-specific tables (`upwork_jobs`, `guru_jobs`, `freelancer_jobs`, `peopleperhour_jobs`, `truelancer_jobs`, `facebook_jobs`) in `jobs.db` using SHA-256 content hashes (`title|description|budget`) to prevent duplicate alerts.
 - **Fast, Lightweight Polling:**
   - **Upwork:** GraphQL search API with automatic headless Selenium visitor token refresh when expired (401/403). Private job checking with Selenium has been removed for blazing-fast cycles.
   - **Guru:** Fast public HTTP scraping (`curl_cffi` + `BeautifulSoup`) requiring zero tokens, zero cookies, and zero Selenium. Supports multi-page pagination when `jobs_per_page > 20`.
   - **Freelancer.com:** High-speed REST API client querying active projects ordered by `time_submitted` (newest first). Zero tokens, zero cookies, zero Selenium.
   - **PeoplePerHour:** Direct SSR React state extraction (`window.PPHReact.initialState`) via `curl_cffi` (chrome124) with zero tokens, zero cookies, and zero Selenium. Automatically routes keyword searches to PeoplePerHour's `/freelance-{slug}-jobs?sort=latest` with multi-page pagination.
   - **Truelancer:** Direct Next.js SSR structured state extraction (`__NEXT_DATA__`) via `curl_cffi` (chrome124) with zero tokens, zero cookies, and zero Selenium. Provides exact ISO UTC timestamps and auto-pagination (`page={page}&q={query}`).
+  - **Facebook Groups:** Resilient, headless IMAP email notification listener (`imaplib` + `BeautifulSoup`). Listens for real-time group activity notifications from `notification@facebookmail.com`, extracting direct group post permalinks, authors, and text snippets without browser scraping or account risk.
 - **Flexible Execution Modes:** Run a single platform, run all platforms together in a single process, or run platforms concurrently in separate terminals.
 - **Interactive Discussion Threads:** Creates a thread under each posted job with full client statistics, budget information, full description, and direct apply links.
 
@@ -70,13 +71,21 @@ An intelligent, modular, and fully automated Discord bot system that monitors fr
 │   ├── formatter.py               #   PeoplePerHour rich embed (Orange) and thread formatter
 │   └── commands.py                #   PeoplePerHour slash commands (/pph_add_tracker, etc.)
 │
-└── truelancer/                    # 🏢 Truelancer platform package
-    ├── config.json                #   Truelancer tracked queries & channel settings
-    ├── config.py                  #   Truelancer configuration loader
-    ├── scraper.py                 #   Next.js __NEXT_DATA__ scraper (curl_cffi)
-    ├── poller.py                  #   Truelancer polling loop (posts to #truelancer)
-    ├── formatter.py               #   Truelancer rich embed (Sky Blue) and thread formatter
-    └── commands.py                #   Truelancer slash commands (/truelancer_add_tracker, etc.)
+├── truelancer/                    # 🏢 Truelancer platform package
+│   ├── config.json                #   Truelancer tracked queries & channel settings
+│   ├── config.py                  #   Truelancer configuration loader
+│   ├── scraper.py                 #   Next.js __NEXT_DATA__ scraper (curl_cffi)
+│   ├── poller.py                  #   Truelancer polling loop (posts to #truelancer)
+│   ├── formatter.py               #   Truelancer rich embed (Sky Blue) and thread formatter
+│   └── commands.py                #   Truelancer slash commands (/truelancer_add_tracker, etc.)
+│
+└── facebook/                      # 🏢 Facebook platform package
+    ├── config.json                #   Facebook tracked queries & channel settings
+    ├── config.py                  #   Facebook configuration loader
+    ├── email_listener.py          #   IMAP notification listener (imaplib + BeautifulSoup)
+    ├── poller.py                  #   Facebook polling loop (posts to #facebook)
+    ├── formatter.py               #   Facebook rich embed (Facebook Blue) and thread formatter
+    └── commands.py                #   Facebook slash commands (/facebook_add_tracker, /facebook_status)
 ```
 
 ---
@@ -99,6 +108,12 @@ pip install -r requirements.txt
 Copy `.env.example` to `.env`:
 ```env
 DISCORD_TOKEN=your_discord_bot_token_here
+
+# Optional: Facebook Group Notifications via Email
+FB_EMAIL_USER=your_email@gmail.com
+FB_EMAIL_PASSWORD=your_app_password
+FB_EMAIL_HOST=imap.gmail.com
+FB_EMAIL_PORT=993
 ```
 *(Upwork visitor authentication tokens are automatically extracted and refreshed by the bot; no manual cookie or token copying is required).*
 
@@ -131,17 +146,23 @@ python main.py --platform peopleperhour
 python main.py --platform truelancer
 ```
 
-### Option 6: Run All Platforms in One Process
+### Option 6: Run Facebook Only
+```powershell
+python main.py --platform facebook
+```
+
+### Option 7: Run All Platforms in One Process
 ```powershell
 python main.py --all
 ```
 
-### Option 7: Run in Separate Terminals (Parallel)
+### Option 8: Run in Separate Terminals (Parallel)
 - **Terminal 1:** `python main.py --platform upwork`
 - **Terminal 2:** `python main.py --platform guru`
 - **Terminal 3:** `python main.py --platform freelancer`
 - **Terminal 4:** `python main.py --platform peopleperhour`
 - **Terminal 5:** `python main.py --platform truelancer`
+- **Terminal 6:** `python main.py --platform facebook`
 
 ---
 

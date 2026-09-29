@@ -161,6 +161,7 @@ You can run platforms in any combination:
    - Terminal 3: `python main.py --platform freelancer`
    - Terminal 4: `python main.py --platform peopleperhour`
    - Terminal 5: `python main.py --platform truelancer`
+   - Terminal 6: `python main.py --platform facebook`
    *(Port conflict on `:5000` is handled automatically by `monitor.py`)*
 
 4. **Backward-compatible execution**:
@@ -174,7 +175,7 @@ You can run platforms in any combination:
 
 ```powershell
 # Compile-check all Python files
-python -m py_compile main.py discord_bot.py db.py logger.py monitor.py utils/discord_helpers.py upwork/config.py upwork/scraper.py upwork/auth_manager.py upwork/formatter.py upwork/poller.py upwork/commands.py guru/config.py guru/scraper.py guru/formatter.py guru/poller.py guru/commands.py freelancer/config.py freelancer/scraper.py freelancer/formatter.py freelancer/poller.py freelancer/commands.py freelancer/__init__.py peopleperhour/config.py peopleperhour/scraper.py peopleperhour/formatter.py peopleperhour/poller.py peopleperhour/commands.py peopleperhour/__init__.py truelancer/config.py truelancer/scraper.py truelancer/formatter.py truelancer/poller.py truelancer/commands.py truelancer/__init__.py
+python -m py_compile main.py discord_bot.py db.py logger.py monitor.py utils/discord_helpers.py upwork/config.py upwork/scraper.py upwork/auth_manager.py upwork/formatter.py upwork/poller.py upwork/commands.py guru/config.py guru/scraper.py guru/formatter.py guru/poller.py guru/commands.py freelancer/config.py freelancer/scraper.py freelancer/formatter.py freelancer/poller.py freelancer/commands.py freelancer/__init__.py peopleperhour/config.py peopleperhour/scraper.py peopleperhour/formatter.py peopleperhour/poller.py peopleperhour/commands.py peopleperhour/__init__.py truelancer/config.py truelancer/scraper.py truelancer/formatter.py truelancer/poller.py truelancer/commands.py truelancer/__init__.py facebook/config.py facebook/email_listener.py facebook/formatter.py facebook/poller.py facebook/commands.py facebook/__init__.py
 
 # CLI help validation
 python main.py --help

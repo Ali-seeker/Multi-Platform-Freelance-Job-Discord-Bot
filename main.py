@@ -71,6 +71,10 @@ AVAILABLE_PLATFORMS = {
         "name": "Truelancer",
         "setup": lambda bot: _setup_truelancer_platform(bot),
     },
+    "facebook": {
+        "name": "Facebook",
+        "setup": lambda bot: _setup_facebook_platform(bot),
+    },
 }
 
 
@@ -102,6 +106,12 @@ async def _setup_truelancer_platform(bot: commands.Bot):
     """Sets up Truelancer platform components."""
     from truelancer import setup_truelancer
     await setup_truelancer(bot)
+
+
+async def _setup_facebook_platform(bot: commands.Bot):
+    """Sets up Facebook platform components."""
+    from facebook import setup_facebook
+    await setup_facebook(bot)
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +208,7 @@ def main():
         "-p",
         type=str,
         default="upwork",
-        help="Platform to run: 'upwork', 'guru', 'freelancer', 'peopleperhour', 'truelancer', or 'all'. Default: 'upwork'",
+        help="Platform to run: 'upwork', 'guru', 'freelancer', 'peopleperhour', 'truelancer', 'facebook', or 'all'. Default: 'upwork'",
     )
     parser.add_argument(
         "--all",
