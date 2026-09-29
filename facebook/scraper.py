@@ -1,9 +1,10 @@
 """
 facebook/scraper.py — High-speed HTTP scraper for Facebook notification feed.
 Uses curl_cffi with session cookies (c_user + xs) to fetch and parse group notifications
-headlessly without launching any browser.
+headlessly from Facebook's official Relay notification store without launching any browser.
 """
 
+import json
 import os
 import re
 import urllib.parse
@@ -22,8 +23,7 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
-NOTIFICATIONS_URL = "https://mbasic.facebook.com/notifications.php"
-DESKTOP_NOTIF_URL = "https://www.facebook.com/notifications"
+NOTIFICATIONS_URL = "https://www.facebook.com/notifications"
 
 
 class FacebookNotificationScraper:
@@ -76,7 +76,7 @@ class FacebookNotificationScraper:
             )
             return []
 
-        # Refresh cookies if updated
+        # Refresh cookies if updated in environment
         self._init_cookies()
 
         headers = {
@@ -106,101 +106,154 @@ class FacebookNotificationScraper:
 
         html_text = resp.text
 
-        # Detect login wall or expired session
-        if "login_form" in html_text or "checkpoint" in html_text or "mbasic_logout_button" not in html_text:
-            if "login.php" in resp.url or "c_user" not in html_text:
-                logger.warning(
-                    "[FACEBOOK] ⚠️ Facebook session appears expired or logged out. Please check your FB_C_USER and FB_XS in .env."
-                )
+        # Verify authentication
+        is_logged_in = (
+            bool(FB_C_USER and FB_C_USER in html_text)
+            or "c_user" in resp.cookies
+            or "notifications_page" in html_text
+        )
 
-        return self._parse_notifications_html(html_text)
+        if not is_logged_in and ("login.php" in resp.url or "login_form" in html_text):
+            logger.warning(
+                "[FACEBOOK] ⚠️ Facebook session appears expired or logged out. Please check your FB_C_USER and FB_XS in .env."
+            )
+            return []
 
-    def _parse_notifications_html(self, html: str) -> list[dict]:
+        return self._extract_notifications_from_page(html_text)
+
+    def _extract_notifications_from_page(self, html: str) -> list[dict]:
         """
-        Parses notification items from mbasic.facebook.com/notifications.php.
+        Extracts notification edges from Facebook's preloaded Relay store scripts.
         """
-        soup = BeautifulSoup(html, "html.parser")
         posts = []
+        seen_ids = set()
 
-        # Find notification links and containers
-        # In mbasic, notifications are usually within <table> or <div> containing links with href containing group links or redirect links
-        notif_elements = soup.find_all("a", href=True)
+        # Find JSON script blocks
+        scripts = re.findall(
+            r'<script[^>]*type="application/json"[^>]*>(.*?)</script>',
+            html,
+            re.DOTALL,
+        )
 
-        seen_links = set()
-
-        for a_tag in notif_elements:
-            href = a_tag["href"]
-            raw_text = a_tag.get_text(strip=True)
-
-            if not raw_text or len(raw_text) < 5:
+        for sc in scripts:
+            if "notifications_page" not in sc:
                 continue
 
-            # Check if this link points to a group or post notification
-            is_group_notif = any(
-                kw in raw_text.lower()
-                for kw in [
-                    "has a new post",
-                    "has new posts",
-                    "posted in",
-                    "shared a post in",
-                    "added a post in",
-                    "new post",
-                ]
-            ) or ("groups" in href and ("posts" in href or "permalink" in href or "notif_t" in href))
-
-            if not is_group_notif:
+            try:
+                data = json.loads(sc)
+            except Exception:
                 continue
 
-            # Resolve canonical post URL
-            full_url = urllib.parse.urljoin("https://www.facebook.com", href)
-
-            # Unpack tracking redirects (e.g. /n/?groups... or /a/notifications.php?...)
-            clean_url = self._clean_url(full_url)
-
-            if clean_url in seen_links:
-                continue
-            seen_links.add(clean_url)
-
-            # Parse Author and Group Name
-            author, group_name = self._extract_author_and_group(raw_text)
-
-            # Check group filter (if configured)
-            if TRACKED_GROUPS:
-                group_lower = group_name.lower()
-                if not any(tg.lower() in group_lower for tg in TRACKED_GROUPS):
+            # Recursively find notifications_page edges
+            edges = self._find_notification_edges(data)
+            for edge in edges:
+                node = edge.get("node", {})
+                notif = node.get("notif", {})
+                if not notif:
                     continue
 
-            # Extract unique post ID
-            post_id = self._extract_post_id(clean_url, raw_text)
+                body_text = notif.get("body", {}).get("text", "").strip()
+                raw_url = notif.get("url", "").strip()
+                notif_id = str(notif.get("notif_id") or notif.get("id") or "").strip()
+                creation_ts = notif.get("creation_time", {}).get("timestamp")
 
-            # Tag matched query
-            matched_query = "All Posts"
-            text_lower = raw_text.lower()
-            for tq in TRACKED_QUERIES:
-                q = tq.get("query", "all")
-                lbl = tq.get("label", q)
-                if q == "all" or q.lower() in text_lower:
-                    matched_query = lbl
-                    break
+                if not body_text or not notif_id or notif_id in seen_ids:
+                    continue
 
-            post_record = {
-                "job_id": post_id,
-                "title": raw_text,
-                "description": f"New activity from {author} in Facebook Group: {group_name}.\n\nClick the link below to view or reply to the full post on Facebook.",
-                "url": clean_url,
-                "budget": "Not specified",
-                "skills": matched_query,
-                "posted_time": datetime.now(timezone.utc).isoformat(),
-                "author": author,
-                "group_name": group_name,
-                "query_label": matched_query,
-            }
-            posts.append(post_record)
+                # Filter for group posts or new post activity
+                is_group_post = any(
+                    kw in body_text.lower()
+                    for kw in [
+                        "has a new post",
+                        "has new posts",
+                        "posted in",
+                        "shared a post in",
+                        "added a new post",
+                        "new post in",
+                        "new post",
+                    ]
+                ) or ("groups" in raw_url and ("posts" in raw_url or "permalink" in raw_url))
+
+                if not is_group_post:
+                    continue
+
+                seen_ids.add(notif_id)
+
+                # Clean the URL
+                clean_url = self._clean_url(raw_url)
+                if not clean_url:
+                    clean_url = f"https://www.facebook.com/notifications/?notif_id={notif_id}"
+
+                # Parse author and group name
+                author, group_name = self._extract_author_and_group(body_text)
+
+                # Check group filter (if configured)
+                if TRACKED_GROUPS:
+                    group_lower = group_name.lower()
+                    if not any(tg.lower() in group_lower for tg in TRACKED_GROUPS):
+                        continue
+
+                # Parse timestamp
+                posted_iso = ""
+                if creation_ts:
+                    try:
+                        posted_iso = datetime.fromtimestamp(int(creation_ts), tz=timezone.utc).isoformat()
+                    except Exception:
+                        posted_iso = datetime.now(timezone.utc).isoformat()
+                else:
+                    posted_iso = datetime.now(timezone.utc).isoformat()
+
+                # Check matched keyword
+                matched_query = "All Posts"
+                text_lower = body_text.lower()
+                for tq in TRACKED_QUERIES:
+                    q = tq.get("query", "all")
+                    lbl = tq.get("label", q)
+                    if q == "all" or q.lower() in text_lower:
+                        matched_query = lbl
+                        break
+
+                post_record = {
+                    "job_id": notif_id,
+                    "title": body_text,
+                    "description": (
+                        f"**👥 Group:** {group_name}\n"
+                        f"**👤 Author:** {author}\n\n"
+                        f"**{body_text}**\n\n"
+                        f"Click the link below to view or reply to the full post on Facebook."
+                    ),
+                    "url": clean_url,
+                    "budget": "Not specified",
+                    "skills": matched_query,
+                    "posted_time": posted_iso,
+                    "author": author,
+                    "group_name": group_name,
+                    "query_label": matched_query,
+                }
+                posts.append(post_record)
 
         return posts
 
+    def _find_notification_edges(self, obj) -> list[dict]:
+        """Traverses JSON structure to extract edges from notifications_page."""
+        edges = []
+        if isinstance(obj, dict):
+            if "notifications_page" in obj:
+                page = obj["notifications_page"]
+                if isinstance(page, dict) and "edges" in page:
+                    edges.extend(page.get("edges", []))
+            for v in obj.values():
+                edges.extend(self._find_notification_edges(v))
+        elif isinstance(obj, list):
+            for item in obj:
+                edges.extend(self._find_notification_edges(item))
+        return edges
+
     def _clean_url(self, raw_url: str) -> str:
-        """Extracts direct canonical Facebook URL from notifications link."""
+        """Extracts direct canonical Facebook URL from notification link."""
+        if not raw_url:
+            return ""
+
         unquoted = urllib.parse.unquote(raw_url)
 
         # Pattern 1: groups/<id>/posts/<id>
@@ -213,25 +266,28 @@ class FacebookNotificationScraper:
         if m2:
             return f"https://www.facebook.com/groups/{m2.group(1)}/permalink/{m2.group(2)}/"
 
-        # Pattern 3: photo/?fbid=<id>
-        m3 = re.search(r"photo(?:\.php)?\?[^#]*\bfbid=(\d+)", unquoted, re.IGNORECASE)
-        if m3:
-            return f"https://www.facebook.com/photo/?fbid={m3.group(1)}"
-
-        # Strip tracking queries
+        # Strip notification tracking parameters
         parsed = urllib.parse.urlparse(raw_url)
         clean = f"https://www.facebook.com{parsed.path}"
-        return clean if parsed.path else raw_url
+        return clean if parsed.path and parsed.path != "/" else raw_url
 
     def _extract_author_and_group(self, text: str) -> tuple[str, str]:
         """Parses group name and author from notification text."""
         # Pattern 1: [Group Name] has a new post.
-        m1 = re.search(r"^(.+?)\s+(?:has\s+(?:a|\d+)\s+new\s+posts?|added\s+a\s+new\s+post)", text, re.IGNORECASE)
+        m1 = re.search(
+            r"^(.+?)\s+(?:has\s+(?:a|\d+)\s+new\s+posts?|added\s+a\s+new\s+post)",
+            text,
+            re.IGNORECASE,
+        )
         if m1:
             return "Group Member", m1.group(1).strip()
 
         # Pattern 2: [Author] posted in [Group Name]
-        m2 = re.search(r"^(.+?)\s+(?:posted|shared a post)\s+in\s+([^:\"]+)", text, re.IGNORECASE)
+        m2 = re.search(
+            r"^(.+?)\s+(?:posted|shared a post)\s+in\s+([^:\"]+)",
+            text,
+            re.IGNORECASE,
+        )
         if m2:
             return m2.group(1).strip(), m2.group(2).strip()
 
@@ -241,12 +297,3 @@ class FacebookNotificationScraper:
             return m3.group(2).strip(), m3.group(1).strip()
 
         return "Facebook Member", "Facebook Group"
-
-    def _extract_post_id(self, clean_url: str, text: str) -> str:
-        """Extracts unique ID for database deduplication."""
-        id_match = re.search(r"/(?:posts|permalink|fbid=)/?(\d+)", clean_url)
-        if id_match:
-            return id_match.group(1)
-
-        # Fallback to hash of url and text
-        return f"fb_{abs(hash(clean_url + text))}"
