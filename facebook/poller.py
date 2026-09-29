@@ -139,14 +139,6 @@ class FacebookPoller(commands.Cog):
                     continue
 
                 is_update = stored_hash is not None and stored_hash != current_hash
-                save_job(post, url_source, current_hash, platform="facebook")
-                total_new_count += 1
-
-                status_prefix = "🔄 [UPDATE]" if is_update else "✨ [NEW]"
-                logger.info(
-                    f"[FACEBOOK] [Step 4/5] 💾 {status_prefix} Saved to 'facebook_jobs': {post_id} | {title[:40]}"
-                )
-
                 content, embed = format_facebook_job_message(
                     job=post,
                     is_updated=is_update,
@@ -192,6 +184,14 @@ class FacebookPoller(commands.Cog):
                     except Exception as te:
                         logger.warning(f"[FACEBOOK] Could not create thread for '{title[:30]}': {te}")
 
+                # Save to database only after successful Discord post
+                save_job(post, url_source, current_hash, platform="facebook")
+                total_new_count += 1
+
+                status_prefix = "🔄 [UPDATE]" if is_update else "✨ [NEW]"
+                logger.info(
+                    f"[FACEBOOK] [Step 4/5] 💾 {status_prefix} Saved to 'facebook_jobs': {post_id} | {title[:40]}"
+                )
                 logger.info(f"[FACEBOOK] [Step 5/5] 💬 Sent to #{channel.name} with details thread")
 
             except Exception as e:
