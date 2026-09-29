@@ -40,19 +40,25 @@ class FacebookNotificationScraper:
         """Builds and loads cookie jar for the session."""
         cookies_dict = {}
 
-        # 1. Check if raw cookie string is provided
+        # 1. Check individual variables first as baseline
+        if FB_C_USER:
+            cookies_dict["c_user"] = FB_C_USER
+        if FB_XS:
+            cookies_dict["xs"] = FB_XS
+
+        for optional_var in ["FB_DATR", "FB_SB", "FB_I_USER"]:
+            val = os.getenv(optional_var, "").strip()
+            if val:
+                cookie_name = optional_var.replace("FB_", "").lower()
+                cookies_dict[cookie_name] = val
+
+        # 2. Raw cookie string (from browser copy) takes highest precedence
         if FB_COOKIES:
             for item in FB_COOKIES.split(";"):
                 item = item.strip()
                 if "=" in item:
                     k, v = item.split("=", 1)
                     cookies_dict[k.strip()] = v.strip()
-
-        # 2. Check individual c_user and xs variables
-        if FB_C_USER:
-            cookies_dict["c_user"] = FB_C_USER
-        if FB_XS:
-            cookies_dict["xs"] = FB_XS
 
         for k, v in cookies_dict.items():
             self.session.cookies.set(k, v, domain=".facebook.com")
@@ -164,6 +170,7 @@ class FacebookNotificationScraper:
                 is_group_post = any(
                     kw in body_text.lower()
                     for kw in [
+                        "now in",
                         "has a new post",
                         "has new posts",
                         "posted in",
@@ -171,6 +178,7 @@ class FacebookNotificationScraper:
                         "added a new post",
                         "new post in",
                         "new post",
+                        "in all pakistan jobs",
                     ]
                 ) or ("groups" in raw_url and ("posts" in raw_url or "permalink" in raw_url))
 
@@ -295,5 +303,10 @@ class FacebookNotificationScraper:
         m3 = re.search(r"new post in\s+(.+?)\s+by\s+(.+)", text, re.IGNORECASE)
         if m3:
             return m3.group(2).strip(), m3.group(1).strip()
+
+        # Pattern 4: Now in [Group Name]: "[Snippet]"
+        m4 = re.search(r"^Now in\s+([^:\"]+):", text, re.IGNORECASE)
+        if m4:
+            return "Group Member", m4.group(1).strip()
 
         return "Facebook Member", "Facebook Group"

@@ -1,16 +1,11 @@
 {
     "channel_name": "99freelas",
-    "channel_id": "",
+    "channel_id": "1554571608083923015",
     "tracked_queries": [
         {
             "query": "automation",
             "url": "https://www.99freelas.com.br/projects?q=automation",
             "label": "Automation"
-        },
-        {
-            "query": "python",
-            "url": "https://www.99freelas.com.br/projects?q=python",
-            "label": "Python"
         }
     ],
     "fetch_interval": 30,
