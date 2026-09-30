@@ -36,22 +36,14 @@ JOBS_PER_PAGE = int(os.getenv("UPWORK_JOBS_PER_PAGE", "10"))
 
 # --- Upwork Config JSON ----------------------------------------------------
 CONFIG_JSON_PATH = os.path.join(os.path.dirname(__file__), "config.json")
-ROOT_CONFIG_JSON_PATH = os.path.join(ROOT_DIR, "config.json")
 
-# Load configuration, giving priority to whichever was more recently modified or root
 _config_data = {}
-for p in [CONFIG_JSON_PATH, ROOT_CONFIG_JSON_PATH]:
-    if os.path.exists(p):
-        try:
-            with open(p, "r") as f:
-                loaded = json.load(f)
-                if loaded:
-                    # Update with non-empty values
-                    for k, v in loaded.items():
-                        if v or k not in _config_data:
-                            _config_data[k] = v
-        except Exception as e:
-            logger.warning(f"Could not load {p}: {e}")
+if os.path.exists(CONFIG_JSON_PATH):
+    try:
+        with open(CONFIG_JSON_PATH, "r") as f:
+            _config_data = json.load(f) or {}
+    except Exception as e:
+        logger.warning(f"Could not load {CONFIG_JSON_PATH}: {e}")
 
 if not _config_data:
     _config_data = {
@@ -101,18 +93,17 @@ TRACKED_URLS = TRACKED_QUERIES
 
 
 def save_config() -> None:
-    """Save the in-memory config back to both upwork/config.json and root config.json."""
+    """Save the in-memory config back to upwork/config.json."""
     _config_data["channel_name"] = CHANNEL_NAME
     _config_data["channel_id"] = CHANNEL_ID
     _config_data["tracked_queries"] = TRACKED_QUERIES
     _config_data["fetch_interval"] = POLL_INTERVAL_SECONDS
     _config_data["jobs_per_page"] = JOBS_PER_PAGE
-    for p in [CONFIG_JSON_PATH, ROOT_CONFIG_JSON_PATH]:
-        try:
-            with open(p, "w") as f:
-                json.dump(_config_data, f, indent=4)
-        except Exception as e:
-            logger.warning(f"Could not save config to {p}: {e}")
+    try:
+        with open(CONFIG_JSON_PATH, "w") as f:
+            json.dump(_config_data, f, indent=4)
+    except Exception as e:
+        logger.warning(f"Could not save config to {CONFIG_JSON_PATH}: {e}")
 
 
 def set_channel_id(new_id: str) -> None:
