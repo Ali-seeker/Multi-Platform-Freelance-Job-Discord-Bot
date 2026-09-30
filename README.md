@@ -82,7 +82,7 @@ An intelligent, modular, and fully automated Discord bot system that monitors fr
 ├── facebook/                      # 🏢 Facebook platform package
 │   ├── config.json                #   Facebook tracked queries & channel settings
 │   ├── config.py                  #   Facebook configuration loader
-│   ├── scraper.py                 #   Direct HTTP notification scraper (curl_cffi with c_user & xs)
+│   ├── scraper.py                 #   Direct HTTP notification scraper (canonical permalinks + full post content extraction)
 │   ├── email_listener.py          #   IMAP notification listener (imaplib + BeautifulSoup)
 │   ├── poller.py                  #   Facebook polling loop (posts to #facebook)
 │   ├── formatter.py               #   Facebook rich embed (Facebook Blue) and thread formatter

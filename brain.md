@@ -19,7 +19,7 @@ A modular, multi-platform **Discord bot** system that monitors freelance marketp
    - Freelancer: Uses high-speed public REST API (`/api/projects/0.1/projects/active/`) ordered by `time_submitted` (newest first). 0 tokens, 0 cookies, 0 Selenium.
    - PeoplePerHour: Uses direct SSR React state hydration extraction (`window.PPHReact.initialState`) via `curl_cffi` (chrome124) with keywords mapped to `/freelance-{slug}-jobs?sort=latest`. 0 tokens, 0 cookies, 0 Selenium.
    - Truelancer: Uses direct Next.js SSR structured state extraction (`__NEXT_DATA__`) via `curl_cffi` (chrome124) with queries mapped to `/freelance-jobs?page={page}&q={query}`. 0 tokens, 0 cookies, 0 Selenium.
-   - Facebook: Uses resilient, headless IMAP email notification listener (`imaplib` + `BeautifulSoup`) or cookie-based HTTP poller (`c_user` & `xs`). 0 browser overhead.
+   - Facebook: Uses cookie-based HTTP poller (`c_user` & `xs`) or IMAP email listener (`imaplib` + `BeautifulSoup`). Automatically resolves canonical permalinks (`/groups/{id}/posts/{post_id}/`) and extracts full post descriptions from Facebook's Relay JSON store into Discord embeds and detail threads. 0 browser overhead.
    - 99freelas: Uses high-speed SSR HTML scraper (`curl_cffi` chrome124 + `bs4`) extracting exact millisecond timestamps (`cp-datetime`), experience level, proposal count, and full description. 0 tokens, 0 cookies, 0 Selenium.
 
 ---

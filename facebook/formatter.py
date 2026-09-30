@@ -30,7 +30,7 @@ def format_facebook_job_message(
         desc_preview += "..."
 
     embed = discord.Embed(
-        title=title,
+        title=title[:256],
         url=post_url,
         description=desc_preview if desc_preview else None,
         color=FACEBOOK_BRAND_COLOR,
@@ -38,14 +38,14 @@ def format_facebook_job_message(
 
     embed.add_field(name="Exact Posted", value=exact_posted, inline=True)
     embed.add_field(name="Relative", value=rel_posted, inline=True)
-    embed.add_field(name="Author", value=author, inline=True)
-    embed.add_field(name="Group", value=group_name, inline=True)
+    embed.add_field(name="Author", value=author[:256], inline=True)
+    embed.add_field(name="Group", value=group_name[:256], inline=True)
 
     if matched_query and matched_query.lower() != "all posts":
         embed.add_field(name="Keyword", value=f"`{matched_query}`", inline=True)
 
     footer_text = f"Facebook Groups • {group_name}"
-    embed.set_footer(text=footer_text)
+    embed.set_footer(text=footer_text[:2048])
     embed.timestamp = posted_dt if posted_dt else discord.utils.utcnow()
 
     content = "🔄 **[UPDATED]** Facebook post updated!" if is_updated else ""
@@ -62,6 +62,7 @@ def format_facebook_thread_details(job: dict) -> str:
     post_url = job.get("url", "https://www.facebook.com")
     description = job.get("description", "No description provided.")
     posted_time = job.get("posted_time", "Unknown")
+    notif_body = job.get("notif_body", "")
 
     lines = [
         f"## 📱 {title}",
@@ -69,11 +70,16 @@ def format_facebook_thread_details(job: dict) -> str:
         f"**👥 Group:** {group_name}",
         f"**🕒 Posted:** {posted_time}",
         f"**🔗 Direct Post Link:** <{post_url}>",
+    ]
+    if notif_body and notif_body != title:
+        lines.append(f"**🔔 Notification Alert:** {notif_body}")
+
+    lines.extend([
         "",
-        "### 📝 Full Post Content:",
+        "### 📝 Full Post Content & Description:",
         description,
         "",
         "---",
         "💡 *Tip: Click the link above to view or reply to this post directly on Facebook.*",
-    ]
+    ])
     return "\n".join(lines)

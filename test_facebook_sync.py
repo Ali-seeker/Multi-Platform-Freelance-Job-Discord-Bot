@@ -66,6 +66,9 @@ for idx, p in enumerate(posts, 1):
     print(f"   Title: {p.get('title')}")
     print(f"   URL:   {p.get('url')}")
     print(f"   Time:  {p.get('posted_time')}")
+    desc = p.get('description', '')
+    desc_preview = desc[:150].replace('\n', ' ')
+    print(f"   Description: {desc_preview}...")
     print("-" * 60)
 
 print(f"\n🎉 Success! The bot can read {len(posts)} group post(s) from Facebook.")
