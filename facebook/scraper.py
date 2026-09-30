@@ -159,16 +159,17 @@ class FacebookNotificationScraper:
                     continue
 
                 body_text = notif.get("body", {}).get("text", "").strip()
+                clean_body = re.sub(r"[\u200e\u200f\u202a-\u202e]", "", body_text).strip()
                 raw_url = notif.get("url", "").strip()
                 notif_id = str(notif.get("notif_id") or notif.get("id") or "").strip()
                 creation_ts = notif.get("creation_time", {}).get("timestamp")
 
-                if not body_text or not notif_id or notif_id in seen_ids:
+                if not clean_body or not notif_id or notif_id in seen_ids:
                     continue
 
                 # Filter for group posts or new post activity
                 is_group_post = any(
-                    kw in body_text.lower()
+                    kw in clean_body.lower()
                     for kw in [
                         "now in",
                         "has a new post",
@@ -178,7 +179,6 @@ class FacebookNotificationScraper:
                         "added a new post",
                         "new post in",
                         "new post",
-                        "in all pakistan jobs",
                     ]
                 ) or ("groups" in raw_url and ("posts" in raw_url or "permalink" in raw_url))
 
@@ -281,10 +281,11 @@ class FacebookNotificationScraper:
 
     def _extract_author_and_group(self, text: str) -> tuple[str, str]:
         """Parses group name and author from notification text."""
+        clean_text = re.sub(r"[\u200e\u200f\u202a-\u202e]", "", text).strip()
         # Pattern 1: [Group Name] has a new post.
         m1 = re.search(
             r"^(.+?)\s+(?:has\s+(?:a|\d+)\s+new\s+posts?|added\s+a\s+new\s+post)",
-            text,
+            clean_text,
             re.IGNORECASE,
         )
         if m1:
@@ -293,19 +294,19 @@ class FacebookNotificationScraper:
         # Pattern 2: [Author] posted in [Group Name]
         m2 = re.search(
             r"^(.+?)\s+(?:posted|shared a post)\s+in\s+([^:\"]+)",
-            text,
+            clean_text,
             re.IGNORECASE,
         )
         if m2:
             return m2.group(1).strip(), m2.group(2).strip()
 
         # Pattern 3: New post in [Group Name] by [Author]
-        m3 = re.search(r"new post in\s+(.+?)\s+by\s+(.+)", text, re.IGNORECASE)
+        m3 = re.search(r"new post in\s+(.+?)\s+by\s+(.+)", clean_text, re.IGNORECASE)
         if m3:
             return m3.group(2).strip(), m3.group(1).strip()
 
         # Pattern 4: Now in [Group Name]: "[Snippet]"
-        m4 = re.search(r"^Now in\s+([^:\"]+):", text, re.IGNORECASE)
+        m4 = re.search(r"^Now in\s+([^:\"]+):", clean_text, re.IGNORECASE)
         if m4:
             return "Group Member", m4.group(1).strip()
 
