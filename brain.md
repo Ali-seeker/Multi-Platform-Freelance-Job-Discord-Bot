@@ -288,3 +288,16 @@ Every poller loop logs 5 numbered steps prefixed by `[{PLATFORM}]`:
 - `[PLATFORM] [Step 3/5] 🗄️ Checking {n} jobs against '{platform}_jobs' table...`
 - `[PLATFORM] [Step 4/5] 💾 {prefix} Saved to '{platform}_jobs': {id} | {title}`
 - `[PLATFORM] [Step 5/5] 💬 Sent to #{channel} with details thread`
+
+---
+
+## 7. Scaling to 30+ Platforms Strategy
+
+> Full detailed blueprint in `SCALING_STRATEGY.md`.
+
+- **Polling Cadence:** Scale from fast 15–30s polling to **10–15 minute batches (`fetch_interval`: 600–900s)** with 20 jobs per page.
+- **Poll Staggering / Jitter:** Stagger platform startup by 15–20 seconds to prevent the thundering herd effect (~2–3 requests/min across the whole system).
+- **System Requirements:** A standard **2 vCPU, 4 GB RAM VPS ($5–$8/mo on Ubuntu 22.04 LTS)** easily handles 30+ platforms 24/7.
+- **Database Concurrency:** SQLite in WAL mode (`PRAGMA journal_mode=WAL;` and `timeout=30.0`) provides non-blocking concurrent reads and writes.
+- **Browser Mutex:** Use a global lock for Chromium session refresh so at most one browser runs at any given second.
+- **Process Management:** Run grouped platform clusters via PM2 or Docker Compose for crash isolation and auto-restart.
