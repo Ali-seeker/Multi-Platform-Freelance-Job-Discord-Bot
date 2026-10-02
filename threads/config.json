@@ -18,11 +18,6 @@
             "label": "Looking for Developer"
         },
         {
-            "query": "need designer",
-            "url": "https://www.threads.net/search?q=need+designer&serp_type=default&filter=recent",
-            "label": "Need Designer"
-        },
-        {
             "query": "job vacancy",
             "url": "https://www.threads.net/search?q=job+vacancy&serp_type=default&filter=recent",
             "label": "Job Vacancy"

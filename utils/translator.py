@@ -143,6 +143,11 @@ class TextTranslator:
 default_translator = TextTranslator()
 
 
+def translate_text(text: str) -> tuple[str, str, bool]:
+    """Convenience helper to translate a string to English."""
+    return default_translator.translate_to_english(text)
+
+
 def translate_job_to_english(job: dict) -> dict:
     """Convenience helper to translate a job dictionary to English."""
     return default_translator.translate_job(job)

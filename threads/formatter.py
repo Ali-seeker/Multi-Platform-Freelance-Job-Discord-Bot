@@ -2,7 +2,7 @@
 threads/formatter.py — Discord embed and thread layout for Meta Threads posts.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import discord
 from utils.discord_helpers import parse_posted_time, split_message
 
@@ -19,13 +19,19 @@ def format_threads_job_message(
     post_url = job.get("url", "https://www.threads.net")
     description = job.get("description", "")
     posted_time = job.get("posted_time", "")
+    epoch_sec = job.get("epoch_sec", 0)
     author = job.get("author", "Threads User")
     author_username = job.get("author_username", "threads_user")
     author_avatar = job.get("author_avatar", "")
     matched_query = query_label or job.get("query_label", "Threads")
     like_count = job.get("like_count")
 
-    posted_dt, exact_posted, rel_posted = parse_posted_time(posted_time)
+    if epoch_sec and epoch_sec > 0:
+        posted_dt = datetime.fromtimestamp(epoch_sec, tz=timezone.utc)
+        exact_posted = f"<t:{epoch_sec}:f>"
+        rel_posted = f"<t:{epoch_sec}:R>"
+    else:
+        posted_dt, exact_posted, rel_posted = parse_posted_time(posted_time)
 
     desc_preview = description[:350].strip()
     if len(description) > 350:
