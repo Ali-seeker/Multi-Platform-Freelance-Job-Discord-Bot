@@ -34,16 +34,26 @@ async def send_with_retry(coro_func, *args, max_retries: int = 3, **kwargs):
 def split_message(text: str, limit: int = 1900) -> list[str]:
     """
     Split a long message into chunks that fit Discord's 2000-char limit.
-    Splits at newline boundaries to avoid cutting mid-sentence.
+    Splits at newline boundaries to avoid cutting mid-sentence, and splits long unbroken lines.
     """
     parts = []
     current = ""
     for line in text.split("\n"):
+        while len(line) > limit:
+            chunk = line[:limit]
+            line = line[limit:]
+            if current:
+                parts.append(current)
+                current = ""
+            parts.append(chunk)
+
         if len(current) + len(line) + 1 > limit:
-            parts.append(current)
+            if current:
+                parts.append(current)
             current = line
         else:
             current = current + "\n" + line if current else line
+
     if current:
         parts.append(current)
     return parts

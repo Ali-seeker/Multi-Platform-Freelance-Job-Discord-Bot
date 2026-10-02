@@ -181,7 +181,7 @@ class WorkanaPoller(commands.Cog):
                     if thread:
                         try:
                             thread_content = format_workana_thread_details(job)
-                            chunks = split_message(thread_content, 2000)
+                            chunks = split_message(thread_content, 1900)
                             for chunk in chunks:
                                 await send_with_retry(thread.send, content=chunk)
                             logger.info(f"[WORKANA] [Step 5/5] 🧵 Thread created & details posted: '{thread.name}'")
