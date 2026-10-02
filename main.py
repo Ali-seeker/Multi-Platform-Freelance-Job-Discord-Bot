@@ -165,6 +165,23 @@ def create_bot(target_platforms: list[str]) -> commands.Bot:
     async def on_ready():
         start_dashboard()
         global_state["platform"] = ",".join(target_platforms)
+
+        # Automatically rename bot display name/nickname to "Bot" across all joined servers
+        for guild in bot.guilds:
+            try:
+                if guild.me and guild.me.nick != "Bot":
+                    await guild.me.edit(nick="Bot")
+                    logger.info(f"🏷️ Updated server nickname to 'Bot' in '{guild.name}'")
+            except Exception as e:
+                logger.debug(f"Could not update server nickname in '{guild.name}': {e}")
+
+        # Attempt to rename global application bot username if permitted
+        try:
+            if bot.user.name != "Bot":
+                await bot.user.edit(username="Bot")
+                logger.info("🏷️ Updated global bot username to 'Bot'")
+        except Exception as e:
+            logger.debug(f"Global username update skipped: {e}")
         
         counts = get_all_job_counts()
         summary_counts = " | ".join(f"{p.title()}: {cnt} jobs" for p, cnt in counts.items())
