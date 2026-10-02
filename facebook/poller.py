@@ -24,6 +24,7 @@ from facebook.formatter import (
 )
 from db import save_job, get_job_count, cleanup_old_jobs, get_job_hash
 from utils.discord_helpers import send_with_retry, split_message, get_or_create_platform_channel
+from utils.translator import translate_job_to_english
 from monitor import global_state
 from logger import get_logger
 
@@ -138,6 +139,9 @@ class FacebookPoller(commands.Cog):
                 if stored_hash is not None and stored_hash == current_hash:
                     continue
 
+                # Translate non-English posts into English before formatting
+                post = await asyncio.to_thread(translate_job_to_english, post)
+
                 is_update = stored_hash is not None and stored_hash != current_hash
                 content, embed = format_facebook_job_message(
                     job=post,
@@ -148,7 +152,7 @@ class FacebookPoller(commands.Cog):
                 job_msg = None
                 if isinstance(channel, discord.ForumChannel):
                     try:
-                        thread_title = f"{'🔄 ' if is_update else ''}{title}"[:100]
+                        thread_title = f"{'🔄 ' if is_update else ''}{post.get('title', title)}"[:100]
                         first_comment = format_facebook_thread_details(post)
                         chunks = split_message(first_comment, 2000)
                         thread, job_msg = await channel.create_thread(

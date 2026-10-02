@@ -49,7 +49,8 @@ E:\Upwork-Discord-Bot\
 │
 ├── utils/                         # 🧰 Global shared utilities
 │   ├── __init__.py
-│   └── discord_helpers.py         #   Shared Discord utilities (send_with_retry, split_message, get_or_create_platform_channel)
+│   ├── discord_helpers.py         #   Shared Discord utilities (send_with_retry, split_message, get_or_create_platform_channel)
+│   └── translator.py              #   🌐 Global auto-translation engine for foreign language posts (GTX + curl_cffi)
 │
 └── upwork/                        # 🏢 Upwork platform package
     ├── __init__.py                #   Package init & setup helper

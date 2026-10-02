@@ -16,6 +16,8 @@ An intelligent, modular, and fully automated Discord bot system that monitors fr
   - **PeoplePerHour:** Direct SSR React state extraction (`window.PPHReact.initialState`) via `curl_cffi` (chrome124) with zero tokens, zero cookies, and zero Selenium. Automatically routes keyword searches to PeoplePerHour's `/freelance-{slug}-jobs?sort=latest` with multi-page pagination.
   - **Facebook Groups:** Direct, lightweight HTTP notification poller (`curl_cffi`) powered by session cookies (`c_user` & `xs`). Autonomously polls `facebook.com/notifications` feed headlessly in the background without needing Facebook or any browser open. Also supports optional fallback email notification listener (`imaplib`).
   - **99freelas:** Ultra-fast SSR HTML scraper (`curl_cffi` with Chrome 124 TLS impersonation) for Brazil's top freelance network. Extracts exact millisecond epoch timestamps (`cp-datetime`), experience levels, client details, and proposal counts with zero tokens, cookies, or Selenium.
+  - **Threads:** High-speed Meta Threads search monitor extracting latest posts, author details, like counts, and direct links without requiring official API tokens.
+- **🌐 Automatic Language Translation:** Integrated, zero-dependency translation engine (`utils/translator.py`) powered by `curl_cffi` with Chrome 124 TLS fingerprinting. Automatically detects posts written in foreign languages (Portuguese, Japanese, Spanish, etc.) and translates title + description into fluent English before dispatching to Discord, while providing a language indicator badge and original text preview in the discussion thread.
 - **Flexible Execution Modes:** Run a single platform, run all platforms together in a single process, or run platforms concurrently in separate terminals.
 - **Interactive Discussion Threads:** Creates a thread under each posted job with full client statistics, budget information, full description, and direct apply links.
 
@@ -36,6 +38,7 @@ An intelligent, modular, and fully automated Discord bot system that monitors fr
 │
 ├── utils/                         # 🧰 Shared cross-platform utilities
 │   ├── discord_helpers.py         #   Retry logic, message chunking, timestamp parsing, channel creation
+│   ├── translator.py              #   🌐 Auto-translation engine for foreign language posts (GTX + curl_cffi)
 │   └── formatter.py               #   Backward-compatible formatter shim
 │
 ├── upwork/                        # 🏢 Upwork platform package

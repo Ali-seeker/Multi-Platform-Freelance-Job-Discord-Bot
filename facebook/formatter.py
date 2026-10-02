@@ -44,6 +44,10 @@ def format_facebook_job_message(
     if matched_query and matched_query.lower() != "all posts":
         embed.add_field(name="Keyword", value=f"`{matched_query}`", inline=True)
 
+    if job.get("is_translated"):
+        orig_lang = job.get("original_language", "Foreign")
+        embed.add_field(name="Language", value=f"🌐 Translated ({orig_lang})", inline=True)
+
     footer_text = f"Facebook Groups • {group_name}"
     embed.set_footer(text=footer_text[:2048])
     embed.timestamp = posted_dt if posted_dt else discord.utils.utcnow()
@@ -63,6 +67,9 @@ def format_facebook_thread_details(job: dict) -> str:
     description = job.get("description", "No description provided.")
     posted_time = job.get("posted_time", "Unknown")
     notif_body = job.get("notif_body", "")
+    is_translated = job.get("is_translated", False)
+    orig_lang = job.get("original_language", "original language")
+    orig_desc = job.get("original_description", "")
 
     lines = [
         f"## 📱 {title}",
@@ -73,11 +80,26 @@ def format_facebook_thread_details(job: dict) -> str:
     ]
     if notif_body and notif_body != title:
         lines.append(f"**🔔 Notification Alert:** {notif_body}")
+    if is_translated:
+        lines.append(f"**🌐 Translation:** Auto-translated from {orig_lang} to English")
 
     lines.extend([
         "",
-        "### 📝 Full Post Content & Description:",
+        "### 📝 Full Post Content & Description (English):",
         description,
+    ])
+
+    if is_translated and orig_desc and orig_desc != description:
+        preview_orig = orig_desc[:1200].strip()
+        if len(orig_desc) > 1200:
+            preview_orig += "..."
+        lines.extend([
+            "",
+            f"### 🔤 Original Text ({orig_lang}):",
+            preview_orig,
+        ])
+
+    lines.extend([
         "",
         "---",
         "💡 *Tip: Click the link above to view or reply to this post directly on Facebook.*",

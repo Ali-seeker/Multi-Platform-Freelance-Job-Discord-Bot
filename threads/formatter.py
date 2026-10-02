@@ -45,6 +45,10 @@ def format_threads_job_message(
     if matched_query:
         embed.add_field(name="Keyword", value=f"`{matched_query}`", inline=True)
 
+    if job.get("is_translated"):
+        orig_lang = job.get("original_language", "Foreign")
+        embed.add_field(name="Language", value=f"🌐 Translated ({orig_lang})", inline=True)
+
     if like_count is not None and like_count > 0:
         embed.add_field(name="Likes", value=f"❤️ {like_count:,}", inline=True)
 
@@ -70,6 +74,9 @@ def format_threads_thread_details(job: dict) -> str:
     posted_time = job.get("posted_time", "Unknown")
     matched_query = job.get("query_label", "Threads")
     like_count = job.get("like_count")
+    is_translated = job.get("is_translated", False)
+    orig_lang = job.get("original_language", "original language")
+    orig_desc = job.get("original_description", "")
 
     lines = [
         f"## 🧵 {title}",
@@ -79,13 +86,29 @@ def format_threads_thread_details(job: dict) -> str:
         f"**🏷️ Matched Keyword:** `{matched_query}`",
     ]
 
+    if is_translated:
+        lines.append(f"**🌐 Translation:** Auto-translated from {orig_lang} to English")
+
     if like_count is not None and like_count > 0:
         lines.append(f"**❤️ Likes:** {like_count:,}")
 
     lines.extend([
         "",
-        "### 📝 Full Post Content:",
+        "### 📝 Full Post Content (English):",
         description,
+    ])
+
+    if is_translated and orig_desc and orig_desc != description:
+        preview_orig = orig_desc[:1200].strip()
+        if len(orig_desc) > 1200:
+            preview_orig += "..."
+        lines.extend([
+            "",
+            f"### 🔤 Original Text ({orig_lang}):",
+            preview_orig,
+        ])
+
+    lines.extend([
         "",
         "---",
         "💡 *Tip: Click the direct link above to view or reply to this post on Threads.*",

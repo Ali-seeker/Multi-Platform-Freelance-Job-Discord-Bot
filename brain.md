@@ -133,6 +133,8 @@ E:\Upwork-Discord-Bot\
 │   ├── __init__.py                #   Exports common utilities.
 │   ├── discord_helpers.py         #   send_with_retry (429 handling), split_message, format_relative_time,
 │   │                              #   get_or_create_platform_channel (single channel management).
+│   ├── translator.py              #   🌐 Global auto-translation engine (GTX endpoint via curl_cffi Chrome 124).
+│   │                              #   Translates non-English posts (PT, JA, ES, etc.) to English before posting.
 │   └── formatter.py               #   Backward-compatible shim re-exporting formatters.
 │
 ├── upwork/                        # 🏢 UPWORK PLATFORM PACKAGE

@@ -50,6 +50,10 @@ def format_99freelas_job_message(
     embed.add_field(name="Propostas", value=f"📥 {proposals_count}", inline=True)
     embed.add_field(name="Nível", value=experience_level, inline=True)
 
+    if job.get("is_translated"):
+        orig_lang = job.get("original_language", "Portuguese")
+        embed.add_field(name="Language", value=f"🌐 Translated ({orig_lang} ➔ English)", inline=True)
+
     if query_label:
         embed.add_field(name="Keyword", value=f"`{query_label}`", inline=True)
 
@@ -89,17 +93,36 @@ def format_99freelas_thread_details(job: dict) -> str:
     lines = [
         f"## 🇧🇷 [{title}]({job_url})",
         "",
-        f"**💰 Orçamento:** {budget}",
-        f"**📊 Nível de Experiência:** {experience_level}",
-        f"**📥 Propostas Enviadas:** {proposals_count}",
-        f"**👤 Cliente:** {client_name}",
-        f"**🕒 Publicado:** {time_info}",
-        f"**🛠️ Habilidades Solicitadas:** {skills}",
+        f"**💰 Budget / Orçamento:** {budget}",
+        f"**📊 Experience Level:** {experience_level}",
+        f"**📥 Proposals Sent:** {proposals_count}",
+        f"**👤 Client:** {client_name}",
+        f"**🕒 Posted:** {time_info}",
+        f"**🛠️ Skills:** {skills}",
+    ]
+
+    if job.get("is_translated"):
+        orig_lang = job.get("original_language", "Portuguese")
+        lines.append(f"**🌐 Language:** Translated from **{orig_lang}** to English")
+
+    lines.extend([
         "",
-        "### 📝 Descrição Completa do Projeto",
+        "### 📝 Full Project Description (English)",
         description,
+    ])
+
+    if job.get("is_translated") and job.get("original_description"):
+        orig_desc = job.get("original_description", "")[:1000]
+        lines.extend([
+            "",
+            "---",
+            f"**Original Text ({job.get('original_language', 'Original')}):**",
+            f"> {orig_desc.replace(chr(10), chr(10) + '> ')}",
+        ])
+
+    lines.extend([
         "",
         "---",
-        f"🔗 **[Ver Projeto e Enviar Proposta no 99freelas]({job_url})**",
-    ]
+        f"🔗 **[View Project & Submit Proposal on 99freelas]({job_url})**",
+    ])
     return "\n".join(lines)

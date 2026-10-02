@@ -22,6 +22,7 @@ from threads.formatter import (
 )
 from db import save_job, get_job_count, cleanup_old_jobs, get_job_hash
 from utils.discord_helpers import send_with_retry, split_message, get_or_create_platform_channel
+from utils.translator import translate_job_to_english
 from monitor import global_state
 from logger import get_logger
 
@@ -134,10 +135,13 @@ class ThreadsPoller(commands.Cog):
                     total_new_count += 1
                     global_state["jobs_posted_last_hour"] += 1
 
+                    # Auto-translate foreign language posts to English
+                    job = await asyncio.to_thread(translate_job_to_english, job)
+
                     content_text, embed = format_threads_job_message(
                         job, is_updated=is_updated, query_label=label
                     )
-                    thread_name = f"Threads: {title[:80]}"
+                    thread_name = f"Threads: {job.get('title', title)[:80]}"
                     thread = None
 
                     if isinstance(channel, discord.ForumChannel):
