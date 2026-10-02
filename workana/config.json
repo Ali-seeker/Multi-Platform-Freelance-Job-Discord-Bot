@@ -1,0 +1,28 @@
+{
+    "channel_name": "workana",
+    "channel_id": "",
+    "tracked_queries": [
+        {
+            "query": "Python",
+            "url": "https://www.workana.com/jobs?query=Python&format=json",
+            "label": "Python"
+        },
+        {
+            "query": "React",
+            "url": "https://www.workana.com/jobs?query=React&format=json",
+            "label": "React"
+        },
+        {
+            "query": "Web Development",
+            "url": "https://www.workana.com/jobs?query=Web+Development&format=json",
+            "label": "Web Development"
+        },
+        {
+            "query": "Mobile",
+            "url": "https://www.workana.com/jobs?query=Mobile&format=json",
+            "label": "Mobile App"
+        }
+    ],
+    "fetch_interval": 300,
+    "jobs_per_page": 15
+}

@@ -92,12 +92,19 @@ main.py (CLI entry point)  [--platform <name> / --all]
    │      - De-duplication: sha256(title | description | budget)
    │      - Format: 99freelas emerald green embed + detail thread
    │
-   └─ [THREADS POLLER]
-          - Channel: #threads (auto-created if not found)
-          - Scraper: Public SSR search scraper (curl_cffi chrome124)
-          - DB Table: threads_jobs
-          - De-duplication: sha256(title | description | job_id)
-          - Format: Threads signature dark embed + detail thread
+   ├─ [THREADS POLLER]
+   │      - Channel: #threads (auto-created if not found)
+   │      - Scraper: Public SSR search scraper (curl_cffi chrome124)
+   │      - DB Table: threads_jobs
+   │      - De-duplication: sha256(title | description | job_id)
+   │      - Format: Threads signature dark embed + detail thread
+   │
+   └─ [WORKANA POLLER]
+          - Channel: #workana (auto-created if not found)
+          - Scraper: Native JSON search endpoint (&format=json) via curl_cffi Chrome 124
+          - DB Table: workana_jobs
+          - De-duplication: sha256(title | description | budget)
+          - Format: Workana Vibrant Cyan embed + detail thread
 ```
 
 ---
@@ -288,12 +295,17 @@ CREATE TABLE IF NOT EXISTS [{platform}_jobs] (
    python main.py --platform threads
    ```
 
-9. **Run All Platforms in One Process**:
+9. **Run Workana Only**:
+   ```powershell
+   python main.py --platform workana
+   ```
+
+10. **Run All Platforms in One Process**:
    ```powershell
    python main.py --all
    ```
 
-10. **Run in Separate Terminals**:
+11. **Run in Separate Terminals**:
    - Terminal 1: `python main.py --platform upwork`
    - Terminal 2: `python main.py --platform guru`
    - Terminal 3: `python main.py --platform freelancer`
@@ -302,6 +314,7 @@ CREATE TABLE IF NOT EXISTS [{platform}_jobs] (
    - Terminal 6: `python main.py --platform facebook`
    - Terminal 7: `python main.py --platform 99freelas`
    - Terminal 8: `python main.py --platform threads`
+   - Terminal 9: `python main.py --platform workana`
 
 ---
 

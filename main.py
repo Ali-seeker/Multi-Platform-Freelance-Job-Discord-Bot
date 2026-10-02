@@ -83,6 +83,10 @@ AVAILABLE_PLATFORMS = {
         "name": "Threads",
         "setup": lambda bot: _setup_threads_platform(bot),
     },
+    "workana": {
+        "name": "Workana",
+        "setup": lambda bot: _setup_workana_platform(bot),
+    },
 }
 
 
@@ -133,6 +137,12 @@ async def _setup_threads_platform(bot: commands.Bot):
     """Sets up Threads platform components."""
     from threads import setup_threads
     await setup_threads(bot)
+
+
+async def _setup_workana_platform(bot: commands.Bot):
+    """Sets up Workana platform components."""
+    from workana import setup_workana
+    await setup_workana(bot)
 
 
 # ---------------------------------------------------------------------------

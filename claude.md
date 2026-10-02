@@ -165,6 +165,7 @@ You can run platforms in any combination:
    - Terminal 6: `python main.py --platform facebook`
    - Terminal 7: `python main.py --platform 99freelas`
    - Terminal 8: `python main.py --platform threads`
+   - Terminal 9: `python main.py --platform workana`
    *(Port conflict on `:5000` is handled automatically by `monitor.py`)*
 
 4. **Backward-compatible execution**:

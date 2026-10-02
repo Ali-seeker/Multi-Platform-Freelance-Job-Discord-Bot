@@ -1,14 +1,14 @@
 # Multi-Platform Freelance Job Discord Bot
 
-An intelligent, modular, and fully automated Discord bot system that monitors freelance marketplaces and work communities (**Upwork**, **Guru**, **Freelancer.com**, **PeoplePerHour**, **Truelancer**, **Facebook Groups**, and **99freelas**) in real-time, de-duplicates job postings via SQLite content hashing, and forwards alerts into **dedicated single channels per platform** (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`, `#facebook`, `#99freelas`) with rich embeds and detailed auto-created discussion threads.
+An intelligent, modular, and fully automated Discord bot system that monitors freelance marketplaces and work communities (**Upwork**, **Guru**, **Freelancer.com**, **PeoplePerHour**, **Truelancer**, **Facebook Groups**, **99freelas**, **Threads**, and **Workana**) in real-time, de-duplicates job postings via SQLite content hashing, and forwards alerts into **dedicated single channels per platform** (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`, `#facebook`, `#99freelas`, `#threads`, `#workana`) with rich embeds and detailed auto-created discussion threads.
 
 ---
 
 ## 🌟 Key Features
 
-- **Multi-Platform Architecture:** Modular design where each platform is an isolated package (`upwork/`, `guru/`, `freelancer/`, `peopleperhour/`, `truelancer/`, `facebook/`, `99freelas/`) with its own scraper/listener, poller, formatter, and configuration.
-- **Dedicated Single Channels:** All jobs for a platform (across any tracked search query or keyword) are sent to a single dedicated channel (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`, `#facebook`, `#99freelas`). The channel is automatically created in your Discord server if it does not already exist.
-- **Isolated SQLite Storage:** Jobs are stored in platform-specific tables (`upwork_jobs`, `guru_jobs`, `freelancer_jobs`, `peopleperhour_jobs`, `truelancer_jobs`, `facebook_jobs`, `99freelas_jobs`) in `jobs.db` using SHA-256 content hashes to prevent duplicate alerts.
+- **Multi-Platform Architecture:** Modular design where each platform is an isolated package (`upwork/`, `guru/`, `freelancer/`, `peopleperhour/`, `truelancer/`, `facebook/`, `99freelas/`, `threads/`, `workana/`) with its own scraper/listener, poller, formatter, and configuration.
+- **Dedicated Single Channels:** All jobs for a platform (across any tracked search query or keyword) are sent to a single dedicated channel (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`, `#facebook`, `#99freelas`, `#threads`, `#workana`). The channel is automatically created in your Discord server if it does not already exist.
+- **Isolated SQLite Storage:** Jobs are stored in platform-specific tables (`upwork_jobs`, `guru_jobs`, `freelancer_jobs`, `peopleperhour_jobs`, `truelancer_jobs`, `facebook_jobs`, `99freelas_jobs`, `threads_jobs`, `workana_jobs`) in `jobs.db` using SHA-256 content hashes to prevent duplicate alerts.
 - **Fast, Lightweight Polling:**
   - **Upwork:** GraphQL search API with automatic headless Selenium visitor token refresh when expired (401/403). Private job checking with Selenium has been removed for blazing-fast cycles.
   - **Guru:** Fast public HTTP scraping (`curl_cffi` + `BeautifulSoup`) requiring zero tokens, zero cookies, and zero Selenium. Supports multi-page pagination when `jobs_per_page > 20`.
@@ -17,6 +17,7 @@ An intelligent, modular, and fully automated Discord bot system that monitors fr
   - **Facebook Groups:** Direct, lightweight HTTP notification poller (`curl_cffi`) powered by session cookies (`c_user` & `xs`). Autonomously polls `facebook.com/notifications` feed headlessly in the background without needing Facebook or any browser open. Also supports optional fallback email notification listener (`imaplib`).
   - **99freelas:** Ultra-fast SSR HTML scraper (`curl_cffi` with Chrome 124 TLS impersonation) for Brazil's top freelance network. Extracts exact millisecond epoch timestamps (`cp-datetime`), experience levels, client details, and proposal counts with zero tokens, cookies, or Selenium.
   - **Threads:** High-speed Meta Threads search monitor extracting latest posts, author details, like counts, and direct links without requiring official API tokens.
+  - **Workana:** High-speed native JSON search client (`&format=json` via `curl_cffi` Chrome 124) for Latin America's premier freelance network. Extracts client country, payment verification, proposal count, and budget with zero Selenium, zero tokens, and automatic Spanish/Portuguese-to-English translation.
 - **🌐 Automatic Language Translation:** Integrated, zero-dependency translation engine (`utils/translator.py`) powered by `curl_cffi` with Chrome 124 TLS fingerprinting. Automatically detects posts written in foreign languages (Portuguese, Japanese, Spanish, etc.) and translates title + description into fluent English before dispatching to Discord, while providing a language indicator badge and original text preview in the discussion thread.
 - **Flexible Execution Modes:** Run a single platform, run all platforms together in a single process, or run platforms concurrently in separate terminals.
 - **Interactive Discussion Threads:** Creates a thread under each posted job with full client statistics, budget information, full description, and direct apply links.
