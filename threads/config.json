@@ -1,0 +1,33 @@
+{
+    "channel_name": "threads",
+    "channel_id": "1555463182116720694",
+    "tracked_queries": [
+        {
+            "query": "hiring developer",
+            "url": "https://www.threads.net/search?q=hiring+developer&serp_type=default&filter=recent",
+            "label": "Hiring Developer"
+        },
+        {
+            "query": "freelance project",
+            "url": "https://www.threads.net/search?q=freelance+project&serp_type=default&filter=recent",
+            "label": "Freelance Project"
+        },
+        {
+            "query": "looking for developer",
+            "url": "https://www.threads.net/search?q=looking+for+developer&serp_type=default&filter=recent",
+            "label": "Looking for Developer"
+        },
+        {
+            "query": "need designer",
+            "url": "https://www.threads.net/search?q=need+designer&serp_type=default&filter=recent",
+            "label": "Need Designer"
+        },
+        {
+            "query": "job vacancy",
+            "url": "https://www.threads.net/search?q=job+vacancy&serp_type=default&filter=recent",
+            "label": "Job Vacancy"
+        }
+    ],
+    "fetch_interval": 300,
+    "jobs_per_page": 20
+}

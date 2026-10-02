@@ -79,6 +79,10 @@ AVAILABLE_PLATFORMS = {
         "name": "99freelas",
         "setup": lambda bot: _setup_99freelas_platform(bot),
     },
+    "threads": {
+        "name": "Threads",
+        "setup": lambda bot: _setup_threads_platform(bot),
+    },
 }
 
 
@@ -123,6 +127,12 @@ async def _setup_99freelas_platform(bot: commands.Bot):
     import importlib
     freelas99 = importlib.import_module("99freelas")
     await freelas99.setup_99freelas(bot)
+
+
+async def _setup_threads_platform(bot: commands.Bot):
+    """Sets up Threads platform components."""
+    from threads import setup_threads
+    await setup_threads(bot)
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +229,7 @@ def main():
         "-p",
         type=str,
         default="upwork",
-        help="Platform to run: 'upwork', 'guru', 'freelancer', 'peopleperhour', 'truelancer', 'facebook', '99freelas', or 'all'. Default: 'upwork'",
+        help=f"Platform to run: {', '.join(repr(k) for k in AVAILABLE_PLATFORMS.keys())}, or 'all'. Default: 'upwork'",
     )
     parser.add_argument(
         "--all",

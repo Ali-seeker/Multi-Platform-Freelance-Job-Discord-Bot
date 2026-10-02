@@ -88,13 +88,21 @@ An intelligent, modular, and fully automated Discord bot system that monitors fr
 │   ├── formatter.py               #   Facebook rich embed (Facebook Blue) and thread formatter
 │   └── commands.py                #   Facebook slash commands (/facebook_add_tracker, /facebook_status)
 │
-└── 99freelas/                     # 🏢 99freelas platform package
-    ├── config.json                #   99freelas tracked queries & channel settings
-    ├── config.py                  #   99freelas configuration loader
-    ├── scraper.py                 #   99freelas HTTP scraper (curl_cffi + BeautifulSoup)
-    ├── poller.py                  #   99freelas polling loop (posts to #99freelas)
-    ├── formatter.py               #   99freelas rich embed (Emerald Green) and thread formatter
-    └── commands.py                #   99freelas slash commands (/99freelas_add_tracker, etc.)
+├── 99freelas/                     # 🏢 99freelas platform package
+│   ├── config.json                #   99freelas tracked queries & channel settings
+│   ├── config.py                  #   99freelas configuration loader
+│   ├── scraper.py                 #   99freelas HTTP scraper (curl_cffi + BeautifulSoup)
+│   ├── poller.py                  #   99freelas polling loop (posts to #99freelas)
+│   ├── formatter.py               #   99freelas rich embed (Emerald Green) and thread formatter
+│   └── commands.py                #   99freelas slash commands (/99freelas_add_tracker, etc.)
+│
+└── threads/                       # 🏢 Meta Threads platform package
+    ├── config.json                #   Threads tracked queries & channel settings (#threads)
+    ├── config.py                  #   Threads configuration loader
+    ├── scraper.py                 #   Threads HTTP scraper (curl_cffi Chrome 124 + Relay JSON parser)
+    ├── poller.py                  #   Threads polling loop (posts to #threads)
+    ├── formatter.py               #   Threads rich embed (Dark 0x101010) and thread formatter
+    └── commands.py                #   Threads slash commands (/threads_add_tracker, etc.)
 ```
 
 ---
@@ -165,12 +173,17 @@ python main.py --platform facebook
 python main.py --platform 99freelas
 ```
 
-### Option 8: Run All Platforms in One Process
+### Option 8: Run Threads Only
+```powershell
+python main.py --platform threads
+```
+
+### Option 9: Run All Platforms in One Process
 ```powershell
 python main.py --all
 ```
 
-### Option 9: Run in Separate Terminals (Parallel)
+### Option 10: Run in Separate Terminals (Parallel)
 - **Terminal 1:** `python main.py --platform upwork`
 - **Terminal 2:** `python main.py --platform guru`
 - **Terminal 3:** `python main.py --platform freelancer`
@@ -178,6 +191,7 @@ python main.py --all
 - **Terminal 5:** `python main.py --platform truelancer`
 - **Terminal 6:** `python main.py --platform facebook`
 - **Terminal 7:** `python main.py --platform 99freelas`
+- **Terminal 8:** `python main.py --platform threads`
 
 ---
 
@@ -213,6 +227,7 @@ All platforms poll the freshest, most recently posted jobs first:
 - **Freelancer.com:** REST API queries are ordered by `sort_field=time_submitted` (newest first).
 - **PeoplePerHour:** Search requests are ordered by `sort=latest` (newest first).
 - **Truelancer:** Search queries fetch active open jobs ordered by newest published first.
+- **Threads:** Search queries fetch recent public posts sorted by `filter=recent` with exact unix epoch timestamps (`taken_at`).
 
 When jobs are sent to Discord:
 1. **Dynamic Discord Timestamps:** Parsed timestamps are rendered using Discord markdown `<t:UNIX:f>` (exact date & time) and `<t:UNIX:R>` (dynamic relative time like `5 minutes ago`), automatically localized to the viewer's device timezone.

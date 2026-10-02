@@ -7,11 +7,11 @@
 
 ## 1. Concept
 
-A modular, multi-platform **Discord bot** system that monitors freelance marketplaces and work communities (**Upwork**, **Guru**, **Freelancer.com**, **PeoplePerHour**, **Truelancer**, **Facebook Groups**, and **99freelas**) for **new job postings** in real time, de-duplicates jobs via SQLite content hashing, and forwards alerts into **dedicated single channels per platform** (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`, `#facebook`, `#99freelas`) as rich embeds with full job details in auto-created threads.
+A modular, multi-platform **Discord bot** system that monitors freelance marketplaces and work communities (**Upwork**, **Guru**, **Freelancer.com**, **PeoplePerHour**, **Truelancer**, **Facebook Groups**, **99freelas**, and **Meta Threads**) for **new job postings** in real time, de-duplicates jobs via SQLite content hashing, and forwards alerts into **dedicated single channels per platform** (`#upwork`, `#guru`, `#freelancer`, `#peopleperhour`, `#truelancer`, `#facebook`, `#99freelas`, `#threads`) as rich embeds with full job details in auto-created threads.
 
 ### Key Tenets
-1. **Single Channel Per Platform**: All jobs from a platform (across any tracked search query or keyword) post into a single dedicated channel (`#upwork` for Upwork, `#guru` for Guru, `#freelancer` for Freelancer, `#peopleperhour` for PeoplePerHour, `#truelancer` for Truelancer, `#facebook` for Facebook, `#99freelas` for 99freelas). Each embed clearly tags the matched keyword.
-2. **Dedicated Database Table Per Platform**: Every platform has its own table in `jobs.db` (`upwork_jobs`, `guru_jobs`, `freelancer_jobs`, `peopleperhour_jobs`, `truelancer_jobs`, `facebook_jobs`, `[99freelas_jobs]`) to isolate jobs and prevent collisions.
+1. **Single Channel Per Platform**: All jobs from a platform (across any tracked search query or keyword) post into a single dedicated channel (`#upwork` for Upwork, `#guru` for Guru, `#freelancer` for Freelancer, `#peopleperhour` for PeoplePerHour, `#truelancer` for Truelancer, `#facebook` for Facebook, `#99freelas` for 99freelas, `#threads` for Threads). Each embed clearly tags the matched keyword.
+2. **Dedicated Database Table Per Platform**: Every platform has its own table in `jobs.db` (`upwork_jobs`, `guru_jobs`, `freelancer_jobs`, `peopleperhour_jobs`, `truelancer_jobs`, `facebook_jobs`, `[99freelas_jobs]`, `threads_jobs`) to isolate jobs and prevent collisions.
 3. **Independent or Parallel Execution**: Each platform can be run individually (`python main.py --platform <name>`), all together in parallel in one process (`python main.py --all`), or across separate terminals.
 4. **Fast Polling Without Selenium Job Verification**: 
    - Upwork: Uses GraphQL scraper + Turnstile session refresh when tokens expire.
@@ -21,6 +21,7 @@ A modular, multi-platform **Discord bot** system that monitors freelance marketp
    - Truelancer: Uses direct Next.js SSR structured state extraction (`__NEXT_DATA__`) via `curl_cffi` (chrome124) with queries mapped to `/freelance-jobs?page={page}&q={query}`. 0 tokens, 0 cookies, 0 Selenium.
    - Facebook: Uses cookie-based HTTP poller (`c_user` & `xs`) or IMAP email listener (`imaplib` + `BeautifulSoup`). Automatically resolves canonical permalinks (`/groups/{id}/posts/{post_id}/`) and extracts full post descriptions from Facebook's Relay JSON store into Discord embeds and detail threads. 0 browser overhead.
    - 99freelas: Uses high-speed SSR HTML scraper (`curl_cffi` chrome124 + `bs4`) extracting exact millisecond timestamps (`cp-datetime`), experience level, proposal count, and full description. 0 tokens, 0 cookies, 0 Selenium.
+   - Threads: Uses direct public SSR search scraping (`curl_cffi` chrome124) extracting preloaded Relay JSON data (`caption.text`, `user`, `taken_at`). 0 tokens, 0 cookies, 0 Selenium.
 
 ---
 
@@ -84,12 +85,19 @@ main.py (CLI entry point)  [--platform <name> / --all]
    │      - De-duplication: sha256(title | description | post_id)
    │      - Format: Facebook blue embed + detail thread
    │
-   └─ [99FREELAS POLLER]
-          - Channel: #99freelas (auto-created if not found)
-          - Scraper: SSR HTML scraper (curl_cffi chrome124 + bs4)
-          - DB Table: [99freelas_jobs]
-          - De-duplication: sha256(title | description | budget)
-          - Format: 99freelas emerald green embed + detail thread
+   ├─ [99FREELAS POLLER]
+   │      - Channel: #99freelas (auto-created if not found)
+   │      - Scraper: SSR HTML scraper (curl_cffi chrome124 + bs4)
+   │      - DB Table: [99freelas_jobs]
+   │      - De-duplication: sha256(title | description | budget)
+   │      - Format: 99freelas emerald green embed + detail thread
+   │
+   └─ [THREADS POLLER]
+          - Channel: #threads (auto-created if not found)
+          - Scraper: Public SSR search scraper (curl_cffi chrome124)
+          - DB Table: threads_jobs
+          - De-duplication: sha256(title | description | job_id)
+          - Format: Threads signature dark embed + detail thread
 ```
 
 ---
@@ -183,14 +191,23 @@ E:\Upwork-Discord-Bot\
 │   ├── formatter.py               #   Facebook embed and thread detail formatter (Facebook Blue branding).
 │   └── commands.py                #   Facebook slash commands (/facebook_add_tracker, /facebook_status).
 │
-└── 99freelas/                     # 🏢 99FREELAS PLATFORM PACKAGE
-    ├── __init__.py                #   Exports Freelance99Scraper, Freelance99Poller, setup_99freelas.
-    ├── config.py                  #   99freelas configs, channel settings, tracker mutator helpers.
-    ├── config.json                #   99freelas tracked queries & dedicated single channel (#99freelas).
-    ├── scraper.py                 #   99freelas SSR HTML scraper (curl_cffi chrome124 + BeautifulSoup).
-    ├── poller.py                  #   99freelas polling loop; routes to #99freelas and [99freelas_jobs] table.
-    ├── formatter.py               #   99freelas embed and thread detail formatter (Emerald Green branding).
-    └── commands.py                #   99freelas slash commands (/99freelas_add_tracker, etc.).
+├── 99freelas/                     # 🏢 99FREELAS PLATFORM PACKAGE
+│   ├── __init__.py                #   Exports Freelance99Scraper, Freelance99Poller, setup_99freelas.
+│   ├── config.py                  #   99freelas configs, channel settings, tracker mutator helpers.
+│   ├── config.json                #   99freelas tracked queries & dedicated single channel (#99freelas).
+│   ├── scraper.py                 #   99freelas SSR HTML scraper (curl_cffi chrome124 + BeautifulSoup).
+│   ├── poller.py                  #   99freelas polling loop; routes to #99freelas and [99freelas_jobs] table.
+│   ├── formatter.py               #   99freelas embed and thread detail formatter (Emerald Green branding).
+│   └── commands.py                #   99freelas slash commands (/99freelas_add_tracker, etc.).
+│
+└── threads/                       # 🏢 THREADS PLATFORM PACKAGE
+    ├── __init__.py                #   Exports ThreadsScraper, ThreadsPoller, setup_threads.
+    ├── config.py                  #   Threads configs, channel settings, tracker mutator helpers.
+    ├── config.json                #   Threads tracked queries & dedicated single channel (#threads).
+    ├── scraper.py                 #   Threads public SSR search scraper (curl_cffi chrome124 + Relay JSON parser).
+    ├── poller.py                  #   Threads polling loop; routes to #threads and threads_jobs table.
+    ├── formatter.py               #   Threads embed and thread detail formatter (Signature Dark branding).
+    └── commands.py                #   Threads slash commands (/threads_add_tracker, etc.).
 ```
 
 ---
@@ -206,6 +223,7 @@ Each platform routes all search queries into its single dedicated channel:
 - Truelancer: `#truelancer`
 - Facebook: `#facebook`
 - 99freelas: `#99freelas`
+- Threads: `#threads`
 When a poller starts, `get_or_create_platform_channel()` checks if the channel exists. If not, it creates it automatically in the Discord guild.
 
 ### Database Schema (`[{platform}_jobs]`)
@@ -258,18 +276,30 @@ CREATE TABLE IF NOT EXISTS [{platform}_jobs] (
    python main.py --platform facebook
    ```
 
-7. **Run All Platforms (Upwork + Guru + Freelancer + PeoplePerHour + Truelancer + Facebook)**:
+7. **Run 99freelas Only**:
+   ```powershell
+   python main.py --platform 99freelas
+   ```
+
+8. **Run Threads Only**:
+   ```powershell
+   python main.py --platform threads
+   ```
+
+9. **Run All Platforms in One Process**:
    ```powershell
    python main.py --all
    ```
 
-8. **Run in Separate Terminals**:
+10. **Run in Separate Terminals**:
    - Terminal 1: `python main.py --platform upwork`
    - Terminal 2: `python main.py --platform guru`
    - Terminal 3: `python main.py --platform freelancer`
    - Terminal 4: `python main.py --platform peopleperhour`
    - Terminal 5: `python main.py --platform truelancer`
    - Terminal 6: `python main.py --platform facebook`
+   - Terminal 7: `python main.py --platform 99freelas`
+   - Terminal 8: `python main.py --platform threads`
 
 ---
 
